@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# 設定 Functions 的環境變數在 build 過程中可用 (雖然主要是在 Runtime 用)
+[functions]
+  node_bundler = "esbuild"
