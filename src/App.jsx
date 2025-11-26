@@ -31,20 +31,19 @@ import {
 // --- 1. CONFIGURATION ---
 
 // [部署設定] 讀取環境變數
-// 注意：為了避免預覽環境報錯，這裡預設使用字串。
-// 在正式部署 (Netlify) 時，請將字串改為讀取環境變數 (取消註解 import.meta.env 的部分)
+// 請確保 .env 檔案中已設定這些變數 (開頭必須是 VITE_)
 const firebaseConfig = {
-  apiKey: "您的_FIREBASE_API_KEY", // import.meta.env.VITE_FIREBASE_API_KEY
-  authDomain: "您的_PROJECT_ID.firebaseapp.com", // import.meta.env.VITE_FIREBASE_AUTH_DOMAIN
-  projectId: "您的_PROJECT_ID", // import.meta.env.VITE_FIREBASE_PROJECT_ID
-  storageBucket: "您的_PROJECT_ID.appspot.com", // import.meta.env.VITE_FIREBASE_STORAGE_BUCKET
-  messagingSenderId: "您的_SENDER_ID", // import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID
-  appId: "您的_APP_ID" // import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // [部署設定] 前端備用金鑰 (可選)
 // 同樣為了預覽穩定，先設為空字串。正式部署請取消註解下方代碼。
-const CLIENT_SIDE_GEMINI_KEY = ""; // import.meta.env.VITE_GEMINI_API_KEY;
+//const CLIENT_SIDE_GEMINI_KEY = ""; // import.meta.env.VITE_GEMINI_API_KEY;
 
 // 初始化 Firebase (防呆機制)
 let app, auth, db;
