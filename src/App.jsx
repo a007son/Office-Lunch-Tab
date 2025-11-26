@@ -42,19 +42,20 @@ const firebaseConfig = {
 };
 
 // [部署設定] 前端備用金鑰 (可選)
-// 同樣為了預覽穩定，先設為空字串。正式部署請取消註解下方代碼。
-//const CLIENT_SIDE_GEMINI_KEY = ""; // import.meta.env.VITE_GEMINI_API_KEY;
+// 為了避免 ReferenceError，這裡必須定義變數，預設為空字串。
+const CLIENT_SIDE_GEMINI_KEY = ""; // 若要開啟本地直連，可改為 import.meta.env.VITE_GEMINI_API_KEY
 
 // 初始化 Firebase (防呆機制)
 let app, auth, db;
 try {
-  if (firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("您的")) {
+  // 檢查是否有讀取到 API Key
+  if (firebaseConfig.apiKey) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
   } else {
-    // 在這裡不拋出錯誤，僅警告，讓 UI 可以顯示設定教學
-    console.warn("⚠️ Firebase Config 尚未設定，請檢查 .env 或直接填入 Config");
+    // 這裡只印出警告，讓 UI 顯示設定提示，而不是直接崩潰
+    console.warn("⚠️ Firebase Config 尚未設定，請檢查 .env 或 Netlify 環境變數");
   }
 } catch (e) {
   console.error("Firebase 初始化失敗:", e);
@@ -87,6 +88,7 @@ const analyzeImage = async (base64Image) => {
   }
 
   // [策略 B]: 後端失敗，嘗試前端直連
+  // 這裡使用 CLIENT_SIDE_GEMINI_KEY 變數，必須確保它在上方有被定義
   if (CLIENT_SIDE_GEMINI_KEY) {
     console.log("🚀 便利模式：使用前端 API Key 直連 Google");
     try {
@@ -362,7 +364,6 @@ export default function App() {
       if (!snap.exists()) {
         setDoc(userRef, { name: userName, balance: 0, lastActive: serverTimestamp() });
       } else {
-        // Update active timestamp
         updateDoc(userRef, { lastActive: serverTimestamp() });
       }
     });
@@ -386,6 +387,7 @@ export default function App() {
     return item.name.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
+  const myUser = usersMap[userName] || { balance: 0, name: userName };
   const totalDebt = Object.values(usersMap).reduce((acc, curr) => acc + (curr.balance || 0), 0);
 
   const isOrderingClosed = useMemo(() => {
@@ -496,7 +498,16 @@ export default function App() {
   };
 
   if (!userName) return <Login onLogin={handleLogin} isConnected={!!user} />;
-  if (!firebaseConfig.apiKey) return <div className="p-10 text-center">請先設定 .env</div>;
+  
+  // 這裡檢查 API Key 是否存在
+  if (!firebaseConfig.apiKey) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
+        <h1 className="text-xl font-bold mb-2">尚未設定環境變數</h1>
+        <p className="text-gray-600 mb-4">請在 Netlify 後台 Environment variables 設定您的 Firebase Key，並確認已將其加入 SECRETS_SCAN_OMIT_KEYS 白名單。</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gray-50 min-h-screen pb-24 md:pb-0 text-gray-800 font-sans">
@@ -504,11 +515,9 @@ export default function App() {
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'ADMIN_LOGIN'} onClose={closeModal} title="管理員驗證" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">驗證</button></>}>
         <div className="flex flex-col gap-4"><div className="bg-orange-50 p-3 rounded-lg flex items-center gap-3 text-orange-800 text-sm"><Lock className="w-4 h-4" /><p>請輸入通行碼 (預設: 8888)</p></div><input type="password" autoFocus className="w-full border border-gray-300 p-3 rounded-lg text-center text-2xl tracking-widest outline-none focus:ring-2 focus:ring-orange-500" placeholder="••••" maxLength={4} value={adminPin} onChange={(e) => { setAdminPin(e.target.value); setPinError(''); }} onKeyDown={(e) => e.key === 'Enter' && confirmModal()} />{pinError && <p className="text-red-500 text-sm mt-2 text-center">{pinError}</p>}</div>
       </Modal>
-      
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'PLACE_ORDER'} onClose={closeModal} title="確認點餐" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">確認下單 (${modalConfig.data?.price * (orderQuantity === '' ? 1 : orderQuantity)})</button></>}>
         <div className="space-y-6"><div className="flex justify-between items-start"><div><p className="text-xs text-gray-400 mb-1">品項</p><p className="text-xl font-bold text-gray-800">{modalConfig.data?.name}</p></div><p className="text-xl font-bold text-orange-600">${modalConfig.data?.price}</p></div><div><p className="text-xs text-gray-400 mb-2">數量</p><div className="flex items-center gap-4"><button onClick={() => setOrderQuantity(Math.max(1, (orderQuantity === '' ? 1 : orderQuantity) - 1))} className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"><Minus className="w-4 h-4" /></button><input type="number" min="1" className="w-16 text-center border border-gray-300 rounded-lg py-2 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-orange-500" value={orderQuantity} onChange={(e) => { const val = e.target.value; if (val === '') setOrderQuantity(''); else { const num = parseInt(val); if (!isNaN(num) && num > 0) setOrderQuantity(num); } }} onBlur={() => { if (orderQuantity === '' || orderQuantity < 1) setOrderQuantity(1); }} /><button onClick={() => setOrderQuantity((orderQuantity === '' ? 1 : orderQuantity) + 1)} className="w-10 h-10 rounded-full border border-orange-200 bg-orange-50 flex items-center justify-center text-orange-600 hover:bg-orange-100"><Plus className="w-4 h-4" /></button></div></div><div><p className="text-xs text-gray-400 mb-2">備註 (選填)</p><textarea className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-none h-20" placeholder="例如：不要香菜..." value={orderNote} onChange={(e) => setOrderNote(e.target.value)} onCompositionStart={() => setIsNoteComposing(true)} onCompositionEnd={(e) => { setIsNoteComposing(false); setOrderNote(e.target.value); }} /></div></div>
       </Modal>
-
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CANCEL_ORDER'} onClose={closeModal} title="取消訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">保留</button><button onClick={confirmModal} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}><p>確定要刪除這筆訂單嗎？金額將從帳本扣除。</p></Modal>
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
 
