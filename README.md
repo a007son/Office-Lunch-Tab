@@ -108,24 +108,35 @@ VITE_GEMINI_API_KEY = <你的 Gemini Key>
 
 ## 🔑 服務申請教學
 
-### 1. Firebase
+1. **Firebase（資料庫）**
 
-Firestore Rule：
+
+1. 前往 Firebase Console 建立新專案。
+2. Authentication：啟用「Anonymous（匿名）」登入。
+3. Firestore Database：建立資料庫，並在「Rules」分頁將規則修改為：
+
 
 ```firestore
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
+match /databases/{database}/documents {
+match /{document=**} {
+allow read, write: if request.auth != null;
+}
+}
 }
 ```
 
-### 2. Google AI Studio
 
-建立 API Key，可加 HTTP Referrer 限制。
+4. Project Settings：複製 Web App 的 `firebaseConfig` 資訊。
+
+
+2. **Google AI Studio（AI 辨識）**
+
+
+1. 前往 Google AI Studio（或 Google Cloud Console）建立 API Key。
+2. 若採用直連模式，建議在 Google Cloud Console 為該 Key 加上 HTTP Referrer 限制；若使用 Netlify Functions，則由後端保護 API Key，不需在前端公開。
+3. 將 Key 設定於 Netlify 後台或本地 `.env`（僅供開發用，正式部署請於 Netlify 設定環境變數）。
 
 ---
 
@@ -150,4 +161,5 @@ office-lunch/
 ## 📝 授權
 
 MIT License — 歡迎修改並使用於公司午餐團購。
+
 
