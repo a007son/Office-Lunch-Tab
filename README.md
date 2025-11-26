@@ -2,7 +2,7 @@
 
 這是一個專為辦公室團購午餐設計的輕量級網頁應用程式。解決每天「找零錢」的困擾，採用「記帳制（Tab System）」，支援每週結算、AI 菜單辨識與截止時間自動封盤。
 
-👉 **特色：**免註冊、AI 讀菜單、支援 Netlify Functions 安全轉發、完全 Serverless 架構。
+👉 **特色：** 免註冊、AI 讀菜單、支援 Netlify Functions 安全轉發、完全 Serverless 架構。
 
 ---
 
@@ -150,3 +150,4 @@ office-lunch/
 ## 📝 授權
 
 MIT License — 歡迎修改並使用於公司午餐團購。
+
