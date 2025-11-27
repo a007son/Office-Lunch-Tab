@@ -45,16 +45,14 @@ const firebaseConfig = {
 // 為了避免 ReferenceError，這裡必須定義變數，預設為空字串。
 const CLIENT_SIDE_GEMINI_KEY = ""; // 若要開啟本地直連，可改為 import.meta.env.VITE_GEMINI_API_KEY
 
-// 初始化 Firebase (防呆機制)
+// 初始化 Firebase
 let app, auth, db;
 try {
-  // 檢查是否有讀取到 API Key
   if (firebaseConfig.apiKey) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
   } else {
-    // 這裡只印出警告，讓 UI 顯示設定提示，而不是直接崩潰
     console.warn("⚠️ Firebase Config 尚未設定，請檢查 .env 或 Netlify 環境變數");
   }
 } catch (e) {
@@ -66,6 +64,42 @@ const DATA_PATH = `artifacts/${APP_ID}/public/data`;
 const USERS_COLLECTION = 'lunch_users';
 const MENU_COLLECTION = 'lunch_menus';
 const ORDERS_COLLECTION = 'lunch_orders';
+
+// --- Helper: 圖片壓縮 ---
+// [調整] 放寬限制以提升 AI 辨識率
+// 寬度 1200px + 品質 0.8 通常會產生 300KB~600KB 的圖片，安全低於 Firestore 1MB 限制
+const resizeImage = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // [修改點 1] 將解析度上限從 800 提升到 1200，讓文字更清晰
+        const MAX_WIDTH = 1200; 
+        const scaleSize = MAX_WIDTH / img.width;
+        
+        if (scaleSize < 1) {
+          canvas.width = MAX_WIDTH;
+          canvas.height = img.height * scaleSize;
+        } else {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        }
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // [修改點 2] 將品質從 0.6 提升到 0.8
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
 
 // --- 2. 雙模組 AI 核心 ---
 const analyzeImage = async (base64Image) => {
@@ -88,7 +122,6 @@ const analyzeImage = async (base64Image) => {
   }
 
   // [策略 B]: 後端失敗，嘗試前端直連
-  // 這裡使用 CLIENT_SIDE_GEMINI_KEY 變數，必須確保它在上方有被定義
   if (CLIENT_SIDE_GEMINI_KEY) {
     console.log("🚀 便利模式：使用前端 API Key 直連 Google");
     try {
@@ -465,20 +498,34 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
     setIsAnalyzing(true);
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        const base64String = reader.result.replace("data:", "").replace(/^.+,/, "");
-        const result = await analyzeImage(base64String);
-        const newRestaurant = result.restaurant || { name: "AI 辨識餐廳", phone: "", address: "" };
-        const newItems = (result.items || []).map((i, idx) => ({ ...i, id: Date.now() + idx }));
-        await setDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), {
-          items: newItems, imageUrl: reader.result, restaurant: newRestaurant, orderDeadline: currentMenu.orderDeadline || ''
-        }, { merge: true });
-      } catch (err) { alert(err.message); } finally { setIsAnalyzing(false); }
-    };
-    reader.readAsDataURL(file);
+    
+    try {
+      // 1. 先進行壓縮
+      const compressedDataUrl = await resizeImage(file);
+      
+      // 2. 去除 Data URL 前綴，只保留 Base64 字串傳給 AI
+      const base64String = compressedDataUrl.replace("data:", "").replace(/^.+,/, "");
+      const result = await analyzeImage(base64String);
+      
+      const newRestaurant = result.restaurant || { name: "AI 辨識餐廳", phone: "", address: "" };
+      const newItems = (result.items || []).map((i, idx) => ({ ...i, id: Date.now() + idx }));
+      
+      // 3. 儲存時使用已壓縮的 compressedDataUrl
+      await setDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), {
+        items: newItems, 
+        imageUrl: compressedDataUrl, // 存入壓縮後的圖片
+        restaurant: newRestaurant, 
+        orderDeadline: currentMenu.orderDeadline || ''
+      }, { merge: true });
+
+    } catch (err) { 
+      alert("上傳失敗: " + err.message); 
+      console.error(err);
+    } finally { 
+      setIsAnalyzing(false); 
+    }
   };
+  
   const addMenuItem = async () => {
     if (!newItemName || !newItemPrice) return;
     const updatedItems = [...(currentMenu.items || []), { id: Date.now().toString(), name: newItemName, price: parseInt(newItemPrice) }];
@@ -498,16 +545,7 @@ export default function App() {
   };
 
   if (!userName) return <Login onLogin={handleLogin} isConnected={!!user} />;
-  
-  // 這裡檢查 API Key 是否存在
-  if (!firebaseConfig.apiKey) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
-        <h1 className="text-xl font-bold mb-2">尚未設定環境變數</h1>
-        <p className="text-gray-600 mb-4">請在 Netlify 後台 Environment variables 設定您的 Firebase Key，並確認已將其加入 SECRETS_SCAN_OMIT_KEYS 白名單。</p>
-      </div>
-    );
-  }
+  if (!firebaseConfig.apiKey) return <div className="p-10 text-center">請先設定 .env</div>;
 
   return (
     <div className="bg-gray-50 min-h-screen pb-24 md:pb-0 text-gray-800 font-sans">
