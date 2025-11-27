@@ -173,8 +173,9 @@ const analyzeImage = async (base64Image) => {
 const Modal = ({ isOpen, onClose, title, children, footer }) => {
   if (!isOpen) return null;
   return (
-    // [修正 2] Modal 改為 flex items-center justify-center 確保絕對置中
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm transition-opacity">
+    // [修正] Mobile: items-start + pt-24 (固定頂部距離), Desktop: items-center (垂直置中)
+    // 這樣在手機上鍵盤彈出時，Modal 不會因為試圖「置中」而被擠到外太空去
+    <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 pt-24 md:pt-4 bg-black/40 backdrop-blur-sm transition-opacity">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 relative z-10 flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-100">
           <h3 className="text-lg font-bold text-gray-900">{title}</h3>
@@ -223,7 +224,7 @@ const Login = ({ onLogin, isConnected }) => {
   };
 
   return (
-    // [修正 1] 登入頁改為 items-start 並增加 pt-20 (手機上偏上)，md:items-center (桌機維持置中)
+    // 維持之前的修正：items-start + pt-20
     <div className="min-h-screen bg-orange-50 flex items-start md:items-center justify-center p-4 pt-20 md:pt-0 relative">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border-t-4 border-orange-500">
         <div className="flex justify-center mb-6">
