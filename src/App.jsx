@@ -107,11 +107,9 @@ const formatPhoneNumber = (phoneNumber) => {
 
   // 市話 (9碼或10碼，含區碼)
   if (cleaned.startsWith('0') && cleaned.length >= 9) {
-    // 兩碼區碼 (02, 04, 07 等)
     if (['02', '04', '07'].includes(cleaned.slice(0, 2))) {
        return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
     }
-    // 三碼或四碼區碼
     if (cleaned.length === 9) {
         return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 5)}-${cleaned.slice(5)}`;
     }
@@ -175,6 +173,7 @@ const analyzeImage = async (base64Image) => {
 const Modal = ({ isOpen, onClose, title, children, footer }) => {
   if (!isOpen) return null;
   return (
+    // [修正 2] Modal 改為 flex items-center justify-center 確保絕對置中
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm transition-opacity">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 relative z-10 flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-100">
@@ -224,7 +223,8 @@ const Login = ({ onLogin, isConnected }) => {
   };
 
   return (
-    <div className="min-h-screen bg-orange-50 flex items-center justify-center p-4 relative">
+    // [修正 1] 登入頁改為 items-start 並增加 pt-20 (手機上偏上)，md:items-center (桌機維持置中)
+    <div className="min-h-screen bg-orange-50 flex items-start md:items-center justify-center p-4 pt-20 md:pt-0 relative">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border-t-4 border-orange-500">
         <div className="flex justify-center mb-6">
           <div className="bg-orange-100 p-4 rounded-full">
@@ -624,7 +624,8 @@ export default function App() {
 
                 {/* 餐廳資訊卡片 (Banner) */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
-                   <div className="w-full h-48 bg-gray-800 relative group overflow-hidden">
+                   {/* [修正 3] 響應式高度：手機版 h-32 (128px)，桌機版 h-48 (192px) */}
+                   <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
                       {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
                       <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
                         <div className="flex flex-col justify-end h-full">
