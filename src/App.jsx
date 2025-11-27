@@ -590,7 +590,7 @@ export default function App() {
       <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full overflow-hidden">
         
         {/* 固定區域: Admin Switch + Tabs + Banner (Menu Only) + Search Bar */}
-        <div className="flex-none bg-gray-50 z-10 shadow-sm relative">
+        <div className="flex-none bg-gray-50 z-10 relative">
             <div className="flex justify-end p-2">
               <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none group">
                 <input type="checkbox" checked={isAdminMode} onChange={handleToggleAdmin} className="rounded text-orange-500 focus:ring-orange-500 cursor-pointer" />
@@ -676,8 +676,8 @@ export default function App() {
                    )}
                 </div>
 
-                {/* 搜尋列 (移到固定區) */}
-                <div className="bg-white rounded-t-2xl border-b shadow-sm p-4">
+                {/* 搜尋列 (移到固定區) - 移除 shadow-sm 以解決陰影過深與超出卡片問題 */}
+                <div className="bg-white rounded-t-2xl border-b border-gray-100 p-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <input 
