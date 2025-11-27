@@ -98,22 +98,14 @@ const resizeImage = (file) => {
 // --- Helper: 電話號碼格式化 ---
 const formatPhoneNumber = (phoneNumber) => {
   if (!phoneNumber) return '';
-  // 移除所有非數字字符
   const cleaned = ('' + phoneNumber).replace(/\D/g, '');
   
-  // 嘗試匹配常見的台灣電話格式
-  // (02) 1234-5678 (台北, 9碼)
-  // (04) 1234-5678 (台中, 9碼)
-  // (03) 123-4567  (其他, 8碼或9碼)
-  // 0912-345-678   (手機)
-
   // 手機 (10碼)
   if (cleaned.length === 10 && cleaned.startsWith('09')) {
     return `${cleaned.slice(0, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
   }
 
   // 市話 (9碼或10碼，含區碼)
-  // 簡單判斷：如果開頭是 0，且長度大於 8
   if (cleaned.startsWith('0') && cleaned.length >= 9) {
     // 兩碼區碼 (02, 04, 07 等)
     if (['02', '04', '07'].includes(cleaned.slice(0, 2))) {
@@ -657,7 +649,7 @@ export default function App() {
                                   <span className="truncate">{currentMenu.restaurant.address}</span>
                                 </div>
                                 <a 
-                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(currentMenu.restaurant.name || currentMenu.restaurant.address)}`} 
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([currentMenu.restaurant.name, currentMenu.restaurant.address].filter(Boolean).join(" "))}`} 
                                   target="_blank" 
                                   rel="noreferrer" 
                                   className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg whitespace-nowrap"
