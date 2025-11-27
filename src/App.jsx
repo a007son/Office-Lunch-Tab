@@ -71,7 +71,7 @@ const resizeImage = (file) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1200; // 提升解析度
+        const MAX_WIDTH = 1200; 
         const scaleSize = MAX_WIDTH / img.width;
         
         if (scaleSize < 1) {
@@ -85,7 +85,7 @@ const resizeImage = (file) => {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         
-        resolve(canvas.toDataURL('image/jpeg', 0.8)); // 提升品質
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -93,6 +93,40 @@ const resizeImage = (file) => {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+};
+
+// --- Helper: 電話號碼格式化 ---
+const formatPhoneNumber = (phoneNumber) => {
+  if (!phoneNumber) return '';
+  // 移除所有非數字字符
+  const cleaned = ('' + phoneNumber).replace(/\D/g, '');
+  
+  // 嘗試匹配常見的台灣電話格式
+  // (02) 1234-5678 (台北, 9碼)
+  // (04) 1234-5678 (台中, 9碼)
+  // (03) 123-4567  (其他, 8碼或9碼)
+  // 0912-345-678   (手機)
+
+  // 手機 (10碼)
+  if (cleaned.length === 10 && cleaned.startsWith('09')) {
+    return `${cleaned.slice(0, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+  }
+
+  // 市話 (9碼或10碼，含區碼)
+  // 簡單判斷：如果開頭是 0，且長度大於 8
+  if (cleaned.startsWith('0') && cleaned.length >= 9) {
+    // 兩碼區碼 (02, 04, 07 等)
+    if (['02', '04', '07'].includes(cleaned.slice(0, 2))) {
+       return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
+    }
+    // 三碼或四碼區碼
+    if (cleaned.length === 9) {
+        return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 5)}-${cleaned.slice(5)}`;
+    }
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+  }
+
+  return phoneNumber;
 };
 
 // --- 2. 雙模組 AI 核心 ---
@@ -107,7 +141,6 @@ const analyzeImage = async (base64Image) => {
     });
 
     if (response.ok) {
-      console.log("✅ 安全模式：透過 Netlify Function 辨識成功");
       return await response.json();
     }
   } catch (e) {
@@ -115,7 +148,6 @@ const analyzeImage = async (base64Image) => {
   }
 
   if (CLIENT_SIDE_GEMINI_KEY) {
-    console.log("🚀 便利模式：使用前端 API Key 直連 Google");
     try {
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CLIENT_SIDE_GEMINI_KEY}`,
@@ -546,7 +578,7 @@ export default function App() {
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CANCEL_ORDER'} onClose={closeModal} title="取消訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">保留</button><button onClick={confirmModal} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}><p>確定要刪除這筆訂單嗎？金額將從帳本扣除。</p></Modal>
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
 
-      {/* Header (固定) */}
+      {/* Header (Fixed) */}
       <header className="bg-white shadow-sm flex-none z-20">
         <div className="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -565,7 +597,7 @@ export default function App() {
       {/* Main Container (Flex Col) */}
       <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full overflow-hidden">
         
-        {/* 固定區域 (包含 Tab 和 點餐頁面的上半部) */}
+        {/* 固定區域: Admin Switch + Tabs + Banner (Menu Only) */}
         <div className="flex-none bg-gray-50 z-10 shadow-sm relative">
             <div className="flex justify-end p-2">
               <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none group">
@@ -582,9 +614,9 @@ export default function App() {
               </div>
             </div>
 
-            {/* 如果是點餐頁面，這裡顯示「固定」的上半部 (Banner + 搜尋) */}
+            {/* Banner 卡片: 獨立區塊，固定在上方 */}
             {activeTab === 'menu' && (
-              <div className="px-4 pt-2 space-y-4">
+              <div className="px-4 pt-2">
                 {isAdminMode && (
                   <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-4 shadow-sm mb-4">
                     <h3 className="text-sm font-bold text-orange-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 管理員設置</h3>
@@ -598,38 +630,69 @@ export default function App() {
                   </div>
                 )}
 
-                {/* 卡片上半部 (固定) */}
-                <div className="bg-white rounded-t-2xl shadow-sm border-b border-gray-100 overflow-hidden">
+                {/* 餐廳資訊卡片 (Banner) */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
                    <div className="w-full h-48 bg-gray-800 relative group overflow-hidden">
                       {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
-                      <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white"><div className="flex justify-between items-end"><div><h2 className="font-bold text-2xl leading-tight mb-1">{currentMenu.restaurant?.name || '今日餐廳'}</h2><div className="flex flex-col gap-1 text-sm text-gray-200">{currentMenu.restaurant?.phone && <div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {currentMenu.restaurant.phone}</div>}{currentMenu.restaurant?.address && <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {currentMenu.restaurant.address}</div>}</div></div>{currentMenu.restaurant?.address && <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(currentMenu.restaurant.address)}`} target="_blank" rel="noreferrer" className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg"><MapPin className="w-3 h-3" /> 地圖</a>}</div></div>
+                      <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
+                        <div className="flex flex-col justify-end h-full">
+                          <h2 className="font-bold text-2xl leading-tight mb-2">{currentMenu.restaurant?.name || '今日餐廳'}</h2>
+                          
+                          {/* 資訊欄位 (分開呈現) */}
+                          <div className="flex flex-col gap-1 text-sm text-gray-200">
+                            {/* 電話欄位 */}
+                            {currentMenu.restaurant?.phone && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="w-3.5 h-3.5" /> 
+                                {/* 電話號碼格式化 */}
+                                {formatPhoneNumber(currentMenu.restaurant.phone)}
+                              </div>
+                            )}
+                            
+                            {/* 地址欄位 + 地圖按鈕 (優先搜尋店名) */}
+                            {currentMenu.restaurant?.address && (
+                              <div className="flex items-center justify-between gap-2 mt-1">
+                                <div className="flex items-center gap-2 truncate">
+                                  <MapPin className="w-3.5 h-3.5 flex-none" /> 
+                                  <span className="truncate">{currentMenu.restaurant.address}</span>
+                                </div>
+                                <a 
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(currentMenu.restaurant.name || currentMenu.restaurant.address)}`} 
+                                  target="_blank" 
+                                  rel="noreferrer" 
+                                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg whitespace-nowrap"
+                                >
+                                  <MapPin className="w-3 h-3" /> 地圖
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                    </div>
+                   
                    {currentMenu.orderDeadline && (
                     <div className={`px-4 py-2 flex justify-between items-center ${isOrderingClosed ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
                       <div className="flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4" />{isOrderingClosed ? '今日已收單' : `收單時間：${currentMenu.orderDeadline}`}</div>
                       {isOrderingClosed && <span className="text-xs bg-white/50 px-2 py-0.5 rounded">Closed</span>}
                     </div>
                    )}
-                   <div className="p-4 bg-white"><div className="relative"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" /><input type="text" placeholder="搜尋..." className="w-full pl-9 pr-9 py-2.5 bg-gray-100 border-transparent focus:bg-white focus:ring-2 focus:ring-orange-500 rounded-lg text-sm transition outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onCompositionStart={() => setIsSearchComposing(true)} onCompositionEnd={(e) => { setIsSearchComposing(false); setSearchTerm(e.target.value); }} />{searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>}</div></div>
                 </div>
               </div>
             )}
-            
-            {/* 訂單頁面也可能需要固定 Summary (視需求而定，目前先保持原樣) */}
-            {activeTab === 'orders' && (
-               <div className="px-4 pt-4">
-                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center"><div><h3 className="text-blue-900 font-bold">今日訂單總覽</h3><p className="text-blue-700 text-sm">共 {todayOrders.length} 份餐點</p></div><div className="text-right"><div className="text-2xl font-bold text-blue-600">${todayOrders.reduce((sum, o) => sum + parseInt(o.price || 0), 0)}</div><div className="text-xs text-blue-400">今日總額</div></div></div>
-               </div>
-            )}
         </div>
 
-        {/* 滾動區域 (Flex-1) */}
+        {/* 滾動區域 (Search + List) */}
         <div className="flex-1 overflow-y-auto px-4 pb-6 pt-0">
           
           {activeTab === 'menu' && (
             <div className="space-y-6 animate-fade-in">
-              {/* 卡片下半部 (滾動) - 移除上圓角，緊貼上半部 */}
-              <div className="bg-white rounded-b-2xl shadow-sm overflow-hidden min-h-[200px]">
+              {/* 卡片下半部 (Search + List) */}
+              <div className="bg-white rounded-2xl shadow-sm overflow-hidden min-h-[400px]">
+                
+                {/* 搜尋列: 放在滾動容器內，但使用 sticky top-0 固定在容器頂部 */}
+                <div className="p-4 bg-white border-b sticky top-0 z-10"><div className="relative"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" /><input type="text" placeholder="搜尋..." className="w-full pl-9 pr-9 py-2.5 bg-gray-100 border-transparent focus:bg-white focus:ring-2 focus:ring-orange-500 rounded-lg text-sm transition outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onCompositionStart={() => setIsSearchComposing(true)} onCompositionEnd={(e) => { setIsSearchComposing(false); setSearchTerm(e.target.value); }} />{searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>}</div></div>
+                
                 <div className="divide-y divide-gray-50">{filteredItems.length > 0 ? filteredItems.map(item => (<div key={item.id} className={`p-4 flex justify-between items-center transition group ${isOrderingClosed ? 'opacity-50 grayscale' : 'hover:bg-orange-50'}`}><div><div className="font-bold text-gray-800 flex items-center gap-2">{item.name} {searchTerm && <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded">符合</span>}</div><div className="text-orange-600 font-semibold">${item.price}</div></div><div className="flex items-center gap-2">{isAdminMode ? (<button onClick={() => removeMenuItem(item.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition"><Trash2 className="w-5 h-5" /></button>) : (<button onClick={() => handlePlaceOrder(item)} disabled={isOrderingClosed} className={`px-4 py-1.5 rounded-full text-sm font-bold transition shadow-sm active:scale-95 ${isOrderingClosed ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border border-orange-200 text-orange-600 hover:bg-orange-600 hover:text-white'}`}>{isOrderingClosed ? '已截止' : '+ 點餐'}</button>)}</div></div>)) : !searchTerm && <div className="p-8 text-center text-gray-400">{isAdminMode ? '請上傳菜單或新增品項' : '今日尚未建立菜單'}</div>}</div>
               </div>
             </div>
@@ -637,7 +700,7 @@ export default function App() {
 
           {activeTab === 'orders' && (
             <div className="space-y-4 animate-fade-in pt-4">
-              {/* 訂單列表 (原本的 Summary 移到上面固定區了，這裡只剩列表) */}
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center"><div><h3 className="text-blue-900 font-bold">今日訂單總覽</h3><p className="text-blue-700 text-sm">共 {todayOrders.length} 份餐點</p></div><div className="text-right"><div className="text-2xl font-bold text-blue-600">${todayOrders.reduce((sum, o) => sum + parseInt(o.price || 0), 0)}</div><div className="text-xs text-blue-400">今日總額</div></div></div>
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">{todayOrders.length === 0 ? (<div className="p-8 text-center text-gray-400">今天還沒有人點餐喔</div>) : (<ul className="divide-y divide-gray-100">{todayOrders.map((order) => (<li key={order.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition"><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${order.userName === userName ? 'bg-orange-500' : 'bg-gray-400'}`}>{order.userName.charAt(0)}</div><div><div className="font-semibold text-gray-800">{order.userName}</div><div className="text-sm text-gray-500 flex items-center gap-1">{order.itemName} {order.quantity > 1 && <span className="text-orange-600 font-bold">x{order.quantity}</span>}</div>{order.note && <div className="text-xs text-gray-400 mt-0.5 bg-gray-100 inline-block px-1.5 rounded">備註: {order.note}</div>}</div></div><div className="flex items-center gap-4"><span className="font-mono font-medium text-gray-600">${order.price}</span>{(isAdminMode || order.userName === userName) && <button onClick={() => handleCancelOrder(order.id, order.price, order.userName)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>}</div></li>))}</ul>)}</div>
             </div>
           )}
