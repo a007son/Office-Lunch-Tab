@@ -119,6 +119,15 @@ const formatPhoneNumber = (phoneNumber) => {
   return phoneNumber;
 };
 
+// --- Helper: 取得今日日期字串 (YYYY-MM-DD) ---
+const getTodayString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // --- 2. 雙模組 AI 核心 ---
 const analyzeImage = async (base64Image) => {
   console.log("啟動 AI 辨識程序...");
@@ -380,17 +389,39 @@ export default function App() {
   useEffect(() => {
     if (!user || !userName || !db) return;
 
+    // 監聽菜單
     const menuUnsub = onSnapshot(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const restaurantData = typeof data.restaurant === 'string' 
           ? { name: data.restaurant, phone: '', address: '' } 
           : (data.restaurant || { name: '', phone: '', address: '' });
-        setCurrentMenu({ ...data, restaurant: restaurantData, orderDeadline: data.orderDeadline || '' });
+        
+        // [新增功能] 檢查菜單日期
+        const todayStr = getTodayString();
+        // 如果資料庫有日期且不是今天，就視為過期 (顯示空菜單)
+        // 注意：這裡只是前端過濾顯示，並未刪除後端資料
+        if (data.menuDate && data.menuDate !== todayStr) {
+           setCurrentMenu({ 
+             items: [], 
+             imageUrl: '', 
+             restaurant: { name: '', phone: '', address: '' }, 
+             orderDeadline: '',
+             menuDate: data.menuDate // 保留舊日期以便 debug 或顯示
+           });
+        } else {
+           setCurrentMenu({ 
+             ...data, 
+             restaurant: restaurantData, 
+             orderDeadline: data.orderDeadline || '',
+             menuDate: data.menuDate || '' 
+           });
+        }
       } else {
-        setCurrentMenu({ items: [], imageUrl: '', restaurant: { name: '尚未設定', phone: '', address: '' }, orderDeadline: '' });
+        setCurrentMenu({ items: [], imageUrl: '', restaurant: { name: '尚未設定', phone: '', address: '' }, orderDeadline: '', menuDate: '' });
       }
     });
+
 
     const usersUnsub = onSnapshot(collection(db, DATA_PATH, USERS_COLLECTION), (snapshot) => {
       const map = {};
@@ -442,11 +473,14 @@ export default function App() {
 
   const isOrderingClosed = useMemo(() => {
     if (!currentMenu.orderDeadline) return false;
+    // 如果是過期菜單，直接視為關閉
+    if (currentMenu.menuDate && currentMenu.menuDate !== getTodayString()) return true;
+
     const [hours, minutes] = currentMenu.orderDeadline.split(':');
     const deadline = new Date();
     deadline.setHours(hours, minutes, 0, 0);
     return currentTime > deadline;
-  }, [currentMenu.orderDeadline, currentTime]);
+  }, [currentMenu.orderDeadline, currentTime, currentMenu.menuDate]);
 
   const closeModal = () => {
     setModalConfig({ isOpen: false, type: null, data: null });
@@ -524,11 +558,13 @@ export default function App() {
       const newRestaurant = result.restaurant || { name: "AI 辨識餐廳", phone: "", address: "" };
       const newItems = (result.items || []).map((i, idx) => ({ ...i, id: Date.now() + idx }));
       
+      // [更新] 寫入時加上今天的日期				
       await setDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), {
         items: newItems, 
         imageUrl: compressedDataUrl, 
         restaurant: newRestaurant, 
-        orderDeadline: currentMenu.orderDeadline || ''
+        orderDeadline: currentMenu.orderDeadline || '',
+        menuDate: getTodayString() // 紀錄今天的日期		   
       }, { merge: true });
 
     } catch (err) { 
@@ -627,6 +663,7 @@ export default function App() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
                    {/* [修正 3] 響應式高度：手機版 h-32 (128px)，桌機版 h-48 (192px) */}
                    <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
+                      {/* 如果有圖就顯示圖，沒圖(被日期過濾掉)顯示預設背景 */}
                       {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
                       <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
                         <div className="flex flex-col justify-end h-full">
@@ -732,3 +769,4 @@ export default function App() {
     </div>
   );
 }
+
