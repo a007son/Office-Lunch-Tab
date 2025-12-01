@@ -101,10 +101,12 @@ const formatPhoneNumber = (phoneNumber) => {
   if (!phoneNumber) return '';
   const cleaned = ('' + phoneNumber).replace(/\D/g, '');
   
+  // 手機 (10碼) -> 0912-345678
   if (cleaned.length === 10 && cleaned.startsWith('09')) {
     return `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
   }
 
+  // 市話 (9碼或10碼，含區碼)
   if (cleaned.startsWith('0') && cleaned.length >= 9) {
     if (['02', '04', '07'].includes(cleaned.slice(0, 2))) {
        return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
@@ -185,6 +187,7 @@ const Modal = ({ isOpen, onClose, title, children, footer }) => {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 relative z-10 flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
           <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+          {/* 增加右上角關閉按鈕，方便操作 */}
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
@@ -523,12 +526,8 @@ export default function App() {
         await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.userName), { 
           balance: increment(-data.price) 
         });
-        const updatedItems = modalConfig.data.allItems.filter(i => i.id !== data.id);
-        if (updatedItems.length === 0) {
-          closeModal();
-        } else {
-           closeModal(); 
-        }
+        // 為了 UX 流暢，直接關閉 Modal
+        closeModal(); 
       } 
       else if (type === 'DELETE_ALL_ORDERS') {
         const batch = writeBatch(db);
@@ -693,6 +692,7 @@ export default function App() {
       
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUserName || modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
 
+      {/* 新增：訂單管理 (齒輪) Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'MANAGE_ORDER'} onClose={closeModal} title={`管理 ${modalConfig.data?.userName} 的訂單`}>
         <div className="space-y-4">
           {modalConfig.data?.items.map((item) => (
@@ -719,11 +719,13 @@ export default function App() {
         </div>
       </Modal>
 
+      {/* 新增：整單刪除確認 (垃圾桶) Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_ALL'} onClose={closeModal} title="刪除全部訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { setModalConfig({ ...modalConfig, type: 'DELETE_ALL_ORDERS' }); confirmModal(); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}>
         <p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的所有訂單嗎？</p>
         <p className="text-sm text-gray-500 mt-2">總金額 ${modalConfig.data?.totalPrice} 將會從帳本中扣除。</p>
       </Modal>
 
+      {/* Header (Fixed) */}
       <header className="bg-white shadow-sm flex-none z-20">
         <div className="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -739,8 +741,10 @@ export default function App() {
         </div>
       </header>
 
+      {/* Main Container (Flex Col) */}
       <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full overflow-hidden">
         
+        {/* 固定區域 */}
         <div className="flex-none bg-gray-50 z-10 relative">
             <div className="flex justify-end p-2">
               <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none group">
