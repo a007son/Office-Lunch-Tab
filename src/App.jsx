@@ -183,11 +183,11 @@ const analyzeImage = async (base64Image) => {
 const Modal = ({ isOpen, onClose, title, children, footer }) => {
   if (!isOpen) return null;
   return (
+    // [修正] Mobile: items-start + pt-24 (固定頂部距離), Desktop: items-center (垂直置中)
     <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 pt-24 md:pt-4 bg-black/40 backdrop-blur-sm transition-opacity">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 relative z-10 flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
           <h3 className="text-lg font-bold text-gray-900">{title}</h3>
-          {/* 增加右上角關閉按鈕，方便操作 */}
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
@@ -236,6 +236,7 @@ const Login = ({ onLogin, isConnected }) => {
   };
 
   return (
+    // 維持之前的修正：items-start + pt-20
     <div className="min-h-screen bg-orange-50 flex items-start md:items-center justify-center p-4 pt-20 md:pt-0 relative">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border-t-4 border-orange-500">
         <div className="flex justify-center mb-6">
@@ -428,7 +429,7 @@ export default function App() {
         map[doc.id] = { 
           id: doc.id,
           name: userData.name || 'Unknown',
-          balance: typeof userData.balance === 'number' ? userData.balance : 0, // 確保 balance 是數字
+          balance: typeof userData.balance === 'number' ? userData.balance : 0, 
           lastActive: userData.lastActive
         };
       });
@@ -497,7 +498,6 @@ export default function App() {
     return item.name.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  // 確保 usersMap[userName] 有值，避免 null pointer
   const myUser = usersMap[userName] || { balance: 0, name: userName };
   const totalDebt = Object.values(usersMap).reduce((acc, curr) => acc + (curr.balance || 0), 0);
 
@@ -516,7 +516,7 @@ export default function App() {
     setAdminPin(''); setPinError(''); setOrderQuantity(1); setOrderNote('');
   };
 
-  // 處理訂單操作
+  // 處理訂單操作 (刪除單項 / 刪除整單)
   const handleOrderAction = async () => {
     const { type, data } = modalConfig;
     
@@ -526,7 +526,6 @@ export default function App() {
         await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.userName), { 
           balance: increment(-data.price) 
         });
-        // 為了 UX 流暢，直接關閉 Modal
         closeModal(); 
       } 
       else if (type === 'DELETE_ALL_ORDERS') {
@@ -592,7 +591,7 @@ export default function App() {
     });
   };
 
-  // [修復] 傳入使用者 ID (targetUserId)、金額 (amount) 與 顯示名稱 (targetUserName)
+  // [修復] 結帳收款：傳入 ID (作為 userRef key) 和 amount
   const handleSettleDebt = (targetUserId, amount, targetUserName) => {
     setModalConfig({ 
       isOpen: true, 
@@ -683,19 +682,20 @@ export default function App() {
     <div className="bg-gray-50 h-screen flex flex-col text-gray-800 font-sans overflow-hidden">
       {/* Modals */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'ADMIN_LOGIN'} onClose={closeModal} title="管理員驗證" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">驗證</button></>}>
-        <div className="flex flex-col gap-4"><div className="bg-orange-50 p-3 rounded-lg flex items-center gap-3 text-orange-800 text-sm"><Lock className="w-4 h-4" /><p>請輸入通行碼 (預設: 8888)</p></div><input type="password" autoFocus className="w-full border border-gray-300 p-3 rounded-lg text-center text-2xl tracking-widest outline-none focus:ring-2 focus:ring-orange-500" placeholder="••••" maxLength={4} value={adminPin} onChange={(e) => { setAdminPin(e.target.value); setPinError(''); }} onKeyDown={(e) => e.key === 'Enter' && confirmModal()} />{pinError && <p className="text-red-500 text-sm mt-2 text-center">{pinError}</p>}</div>
+        <div className="flex flex-col gap-4"><div className="bg-orange-50 p-3 rounded-lg flex items-center gap-3 text-orange-800 text-sm"><Lock className="w-4 h-4" /><p>請輸入通行碼</p></div><input type="password" autoFocus className="w-full border border-gray-300 p-3 rounded-lg text-center text-2xl tracking-widest outline-none focus:ring-2 focus:ring-orange-500" placeholder="••••" maxLength={4} value={adminPin} onChange={(e) => { setAdminPin(e.target.value); setPinError(''); }} onKeyDown={(e) => e.key === 'Enter' && confirmModal()} />{pinError && <p className="text-red-500 text-sm mt-2 text-center">{pinError}</p>}</div>
       </Modal>
       
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'PLACE_ORDER'} onClose={closeModal} title="確認點餐" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">確認下單 (${modalConfig.data?.price * (orderQuantity === '' ? 1 : orderQuantity)})</button></>}>
         <div className="space-y-6"><div className="flex justify-between items-start"><div><p className="text-xs text-gray-400 mb-1">品項</p><p className="text-xl font-bold text-gray-800">{modalConfig.data?.name}</p></div><p className="text-xl font-bold text-orange-600">${modalConfig.data?.price}</p></div><div><p className="text-xs text-gray-400 mb-2">數量</p><div className="flex items-center gap-4"><button onClick={() => setOrderQuantity(Math.max(1, (orderQuantity === '' ? 1 : orderQuantity) - 1))} className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"><Minus className="w-4 h-4" /></button><input type="number" min="1" className="w-16 text-center border border-gray-300 rounded-lg py-2 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-orange-500" value={orderQuantity} onChange={(e) => { const val = e.target.value; if (val === '') setOrderQuantity(''); else { const num = parseInt(val); if (!isNaN(num) && num > 0) setOrderQuantity(num); } }} onBlur={() => { if (orderQuantity === '' || orderQuantity < 1) setOrderQuantity(1); }} /><button onClick={() => setOrderQuantity((orderQuantity === '' ? 1 : orderQuantity) + 1)} className="w-10 h-10 rounded-full border border-orange-200 bg-orange-50 flex items-center justify-center text-orange-600 hover:bg-orange-100"><Plus className="w-4 h-4" /></button></div></div><div><p className="text-xs text-gray-400 mb-2">備註 (選填)</p><textarea className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-none h-20" placeholder="例如：不要香菜..." value={orderNote} onChange={(e) => setOrderNote(e.target.value)} onCompositionStart={() => setIsNoteComposing(true)} onCompositionEnd={(e) => { setIsNoteComposing(false); setOrderNote(e.target.value); }} /></div></div>
       </Modal>
       
+      {/* [修復] 移除重複定義，只保留這個 SETTLE_DEBT Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUserName || modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
 
-      {/* 新增：訂單管理 (齒輪) Modal */}
+      {/* [修復] 確保 data.items 存在才進行 map，防止 Cannot read properties of undefined */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'MANAGE_ORDER'} onClose={closeModal} title={`管理 ${modalConfig.data?.userName} 的訂單`}>
         <div className="space-y-4">
-          {modalConfig.data?.items.map((item) => (
+          {modalConfig.data?.items?.map((item) => (
             <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
               <div>
                 <div className="font-bold text-gray-800">{item.itemName} {item.quantity > 1 && <span className="text-orange-600">x{item.quantity}</span>}</div>
@@ -719,7 +719,6 @@ export default function App() {
         </div>
       </Modal>
 
-      {/* 新增：整單刪除確認 (垃圾桶) Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_ALL'} onClose={closeModal} title="刪除全部訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { setModalConfig({ ...modalConfig, type: 'DELETE_ALL_ORDERS' }); confirmModal(); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}>
         <p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的所有訂單嗎？</p>
         <p className="text-sm text-gray-500 mt-2">總金額 ${modalConfig.data?.totalPrice} 將會從帳本中扣除。</p>
