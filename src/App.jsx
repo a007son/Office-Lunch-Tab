@@ -26,7 +26,7 @@ import {
   Utensils, DollarSign, User, Users, Trash2, CheckCircle, LogOut, 
   ChefHat, Search, Sparkles, Camera, Loader2, X, AlertCircle, Lock, 
   MapPin, Phone, MessageSquare, Minus, Plus, Wifi, Calendar, Clock,
-  CheckSquare, Square, Settings, History
+  CheckSquare, Square, Settings, History, ChevronRight
 } from 'lucide-react';
 
 // --- 1. CONFIGURATION ---
@@ -325,6 +325,7 @@ const Login = ({ onLogin, isConnected }) => {
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Unknown Date';
   const date = new Date(timestamp.seconds * 1000);
+  // [修改] 移除年份，只顯示 月/日 (週X)
   return date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', weekday: 'short' });
 };
 
@@ -499,7 +500,7 @@ export default function App() {
       groups[dateStr].orders.push(order);
       groups[dateStr].total += (order.price || 0);
     });
-    return Object.values(groups).sort((a, b) => 0);
+    return Object.values(groups).sort((a, b) => 0); // 保持原始排序 (最新的在最上面)
   }, [myHistory]);
 
   const filteredItems = (currentMenu.items || []).filter(item => {
@@ -931,11 +932,100 @@ export default function App() {
           {activeTab === 'wallet' && (
             <div className="space-y-6 animate-fade-in pt-4">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <h3 className="text-gray-500 font-medium mb-2 flex items-center gap-2"><User className="w-4 h-4"/> 我的帳本</h3>
-                <div className="flex items-end justify-between mb-4"><div><div className="text-4xl font-bold text-gray-800">${myUser.balance}</div><div className="text-sm text-gray-400 mt-1">目前累積欠款</div></div>{myUser.balance > 0 ? (<div className="text-right"><span className="inline-block bg-red-100 text-red-600 text-xs px-2 py-1 rounded mb-1">尚未付款</span><p className="text-xs text-gray-400">請找管理員結帳</p></div>) : (<div className="flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold"><CheckCircle className="w-4 h-4" /> 無欠款</div>)}</div>
-                <div className="border-t pt-4"><h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">每日消費明細</h4><div className="space-y-4">{groupedHistory.length > 0 ? groupedHistory.map(group => (<div key={group.date} className="bg-gray-50 rounded-lg p-3"><div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-200"><span className="text-xs font-bold text-gray-500 flex items-center gap-1"><Calendar className="w-3 h-3"/> {group.date}</span><span className="text-xs font-bold text-gray-800">合計 ${group.total}</span></div><div className="space-y-2">{group.orders.map(h => (<div key={h.id} className="flex justify-between text-sm pl-2 border-l-2 border-orange-200"><span className="text-gray-600">{h.itemName} {h.quantity > 1 && `x${h.quantity}`}</span><span className="text-gray-900 font-medium">${h.price}</span></div>))}</div></div>)) : <div className="text-gray-400 text-sm italic text-center py-4">尚無紀錄</div>}</div></div>
+                <h3 className="text-gray-500 font-medium mb-4 flex items-center gap-2"><User className="w-4 h-4"/> 我的帳本</h3>
+                <div className="flex items-end justify-between mb-6">
+                  <div>
+                    <div className="text-4xl font-bold text-gray-800">${myUser.balance}</div>
+                    <div className="text-sm text-gray-400 mt-1">目前累積欠款</div>
+                  </div>
+                  {myUser.balance > 0 ? (
+                    <div className="text-right">
+                      <span className="inline-block bg-red-100 text-red-600 text-xs px-2 py-1 rounded mb-1">尚未付款</span>
+                      <p className="text-xs text-gray-400">請找管理員結帳</p>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold">
+                      <CheckCircle className="w-4 h-4" /> 無欠款
+                    </div>
+                  )}
+                </div>
+                
+                {/* [修改] 每日消費明細：Timeline 樣式 */}
+                <div className="border-t pt-4">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">歷史紀錄</h4>
+                  <div className="space-y-0 relative">
+                    {/* 左側直線 */}
+                    {groupedHistory.length > 0 && <div className="absolute left-[3.5rem] top-2 bottom-2 w-0.5 bg-gray-100"></div>}
+                    
+                    {groupedHistory.length > 0 ? groupedHistory.map((group, idx) => (
+                      <div key={group.date} className="relative flex gap-4 pb-6 last:pb-0">
+                        {/* 左側日期 */}
+                        <div className="w-12 pt-1 flex flex-col items-center shrink-0">
+                          <span className="text-xs font-bold text-gray-500">{group.date.split(' ')[0]}</span>
+                          <span className="text-[10px] text-gray-400">{group.date.split(' ')[1]}</span>
+                        </div>
+                        
+                        {/* 中間圓點 */}
+                        <div className="absolute left-[3.5rem] -translate-x-1/2 mt-1.5 w-2.5 h-2.5 rounded-full bg-orange-200 border-2 border-white z-10"></div>
+                        
+                        {/* 右側內容 */}
+                        <div className="flex-1 bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition">
+                           <div className="flex justify-between items-baseline mb-2">
+                             <h5 className="text-xs font-bold text-gray-700">當日合計</h5>
+                             <span className="font-mono font-bold text-gray-900">${group.total}</span>
+                           </div>
+                           <div className="space-y-1">
+                             {group.orders.map(h => (
+                               <div key={h.id} className="flex justify-between text-sm text-gray-500">
+                                 <span>{h.itemName} {h.quantity > 1 && `x${h.quantity}`}</span>
+                                 <span className="text-gray-400">${h.price}</span>
+                               </div>
+                             ))}
+                           </div>
+                        </div>
+                      </div>
+                    )) : (
+                      <div className="text-gray-400 text-sm italic text-center py-4">尚無消費紀錄</div>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"><div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-gray-700 flex items-center gap-2"><Users className="w-4 h-4" /> 辦公室總帳</h3><span className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">總欠款: ${totalDebt}</span></div><div className="divide-y divide-gray-100">{Object.values(usersMap).sort((a, b) => b.balance - a.balance).map(u => (<div key={u.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold">{u.name.charAt(0)}</div><div><div className="font-medium text-gray-900">{u.name}</div><div className={`text-xs ${u.balance > 0 ? 'text-red-500' : 'text-green-500'}`}>{u.balance > 0 ? '未結清' : '已結清'}</div></div></div><div className="flex items-center gap-4"><div className="text-right"><span className={`font-bold ${u.balance > 0 ? 'text-gray-800' : 'text-gray-300'}`}>${u.balance}</span></div>{isAdminMode && u.balance > 0 && (<button onClick={() => handleSettleDebt(u.id, u.balance, u.name)} className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-200 transition">收款</button>)}</div></div>))}</div></div>
+
+              {/* [修改] 只有管理員看得到辦公室總帳 */}
+              {isAdminMode ? (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+                    <h3 className="font-bold text-gray-700 flex items-center gap-2"><Users className="w-4 h-4" /> 辦公室總帳</h3>
+                    <span className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">總欠款: ${totalDebt}</span>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {Object.values(usersMap).sort((a, b) => b.balance - a.balance).map(u => (
+                      <div key={u.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold">{u.name.charAt(0)}</div>
+                          <div>
+                            <div className="font-medium text-gray-900">{u.name}</div>
+                            <div className={`text-xs ${u.balance > 0 ? 'text-red-500' : 'text-green-500'}`}>{u.balance > 0 ? '未結清' : '已結清'}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <span className={`font-bold ${u.balance > 0 ? 'text-gray-800' : 'text-gray-300'}`}>${u.balance}</span>
+                          </div>
+                          {u.balance > 0 && (
+                            <button onClick={() => handleSettleDebt(u.id, u.balance, u.name)} className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-200 transition">收款</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                // 普通使用者提示
+                <div className="text-center text-xs text-gray-300 py-4 flex items-center justify-center gap-1">
+                  <Lock className="w-3 h-3" /> 只有管理員可查看其他人帳務
+                </div>
+              )}
             </div>
           )}
         </div>
