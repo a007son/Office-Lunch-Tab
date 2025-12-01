@@ -184,7 +184,6 @@ const Modal = ({ isOpen, onClose, title, children, footer }) => {
   if (!isOpen) return null;
   return (
     // [修正] Mobile: items-start + pt-24 (固定頂部距離), Desktop: items-center (垂直置中)
-    // 這樣在手機上鍵盤彈出時，Modal 不會因為試圖「置中」而被擠到外太空去
     <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 pt-24 md:pt-4 bg-black/40 backdrop-blur-sm transition-opacity">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 relative z-10 flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
@@ -527,14 +526,10 @@ export default function App() {
           balance: increment(-data.price) 
         });
         
-        // 如果這是該用戶的最後一筆訂單，Modal 會自動變空，建議關閉
-        // 這裡為了簡單，刪除後重新整理 current modal data
         const updatedItems = modalConfig.data.allItems.filter(i => i.id !== data.id);
         if (updatedItems.length === 0) {
           closeModal();
         } else {
-           // 更新 Modal 內的資料顯示 (這裡其實因為 data 是傳值，UI 不會自動更新，通常建議直接關閉 Modal)
-           // 為了 UX 流暢，我們選擇關閉 Modal，讓使用者在外層看到更新
            closeModal(); 
         }
       } 
@@ -605,7 +600,7 @@ export default function App() {
     });
   };
 
-  // [修復] 結帳收款：傳入 ID (作為 userRef key) 和 amount
+  // 結帳收款：傳入 ID 和 amount
   const handleSettleDebt = (targetUserId, amount) => {
     setModalConfig({ isOpen: true, type: 'SETTLE_DEBT', data: { targetUser: targetUserId, amount } });
   };
@@ -701,8 +696,8 @@ export default function App() {
         <div className="space-y-6"><div className="flex justify-between items-start"><div><p className="text-xs text-gray-400 mb-1">品項</p><p className="text-xl font-bold text-gray-800">{modalConfig.data?.name}</p></div><p className="text-xl font-bold text-orange-600">${modalConfig.data?.price}</p></div><div><p className="text-xs text-gray-400 mb-2">數量</p><div className="flex items-center gap-4"><button onClick={() => setOrderQuantity(Math.max(1, (orderQuantity === '' ? 1 : orderQuantity) - 1))} className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"><Minus className="w-4 h-4" /></button><input type="number" min="1" className="w-16 text-center border border-gray-300 rounded-lg py-2 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-orange-500" value={orderQuantity} onChange={(e) => { const val = e.target.value; if (val === '') setOrderQuantity(''); else { const num = parseInt(val); if (!isNaN(num) && num > 0) setOrderQuantity(num); } }} onBlur={() => { if (orderQuantity === '' || orderQuantity < 1) setOrderQuantity(1); }} /><button onClick={() => setOrderQuantity((orderQuantity === '' ? 1 : orderQuantity) + 1)} className="w-10 h-10 rounded-full border border-orange-200 bg-orange-50 flex items-center justify-center text-orange-600 hover:bg-orange-100"><Plus className="w-4 h-4" /></button></div></div><div><p className="text-xs text-gray-400 mb-2">備註 (選填)</p><textarea className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-none h-20" placeholder="例如：不要香菜..." value={orderNote} onChange={(e) => setOrderNote(e.target.value)} onCompositionStart={() => setIsNoteComposing(true)} onCompositionEnd={(e) => { setIsNoteComposing(false); setOrderNote(e.target.value); }} /></div></div>
       </Modal>
       
-      {/* [修復] 這是之前被重複定義，導致白畫面的主因。現在只保留這一個正確的 SETTLE_DEBT Modal */}
-      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
+      {/* 修正：保留單一正確的 SETTLE_DEBT Modal */}
+      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{usersMap[modalConfig.data?.targetUser]?.name}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
 
       {/* 新增：訂單管理 (齒輪) Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'MANAGE_ORDER'} onClose={closeModal} title={`管理 ${modalConfig.data?.userName} 的訂單`}>
@@ -857,7 +852,6 @@ export default function App() {
         <div className="flex-1 overflow-y-auto px-4 pb-6 pt-0 bg-gray-50">
           {activeTab === 'menu' && (
             <div className="space-y-6 animate-fade-in">
-              {/* 卡片下半部 (List Only) */}
               <div className="bg-white rounded-b-2xl shadow-sm overflow-hidden min-h-[200px]">
                 <div className="divide-y divide-gray-50">{filteredItems.length > 0 ? filteredItems.map(item => (<div key={item.id} className={`p-4 flex justify-between items-center transition group ${isOrderingClosed ? 'opacity-50 grayscale' : 'hover:bg-orange-50'}`}><div><div className="font-bold text-gray-800 flex items-center gap-2">{item.name} {searchTerm && <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded">符合</span>}</div><div className="text-orange-600 font-semibold">${item.price}</div></div><div className="flex items-center gap-2">{isAdminMode ? (<button onClick={() => removeMenuItem(item.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition"><Trash2 className="w-5 h-5" /></button>) : (<button onClick={() => handlePlaceOrder(item)} disabled={isOrderingClosed} className={`px-4 py-1.5 rounded-full text-sm font-bold transition shadow-sm active:scale-95 ${isOrderingClosed ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border border-orange-200 text-orange-600 hover:bg-orange-600 hover:text-white'}`}>{isOrderingClosed ? '已截止' : '+ 點餐'}</button>)}</div></div>)) : !searchTerm && <div className="p-8 text-center text-gray-400">{isAdminMode ? '請上傳菜單或新增品項' : '今日尚未建立菜單'}</div>}</div>
               </div>
@@ -870,7 +864,6 @@ export default function App() {
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 {todayOrders.length === 0 ? (<div className="p-8 text-center text-gray-400">今天還沒有人點餐喔</div>) : (
                   <ul className="divide-y divide-gray-100">
-                    {/* 訂單合併邏輯：同一人顯示一行 */}
                     {groupedOrders.map((group) => (
                       <li key={group.userName} className="p-4 flex items-start justify-between hover:bg-gray-50 transition">
                         <div className="flex items-start gap-3 flex-1">
@@ -880,22 +873,17 @@ export default function App() {
                           <div className="flex-1">
                             <div className="font-semibold text-gray-800 flex items-center gap-2">
                               {group.userName}
-                              {/* 操作按鈕區域 */}
                               {(isAdminMode || group.userName === userName) && (
                                 <div className="flex items-center gap-1 ml-2">
-                                   {/* 齒輪：個別刪除 */}
                                    <button onClick={() => handleManageOrder(group)} className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-200">
                                      <Settings className="w-3.5 h-3.5" />
                                    </button>
-                                   {/* 垃圾桶：整單刪除 */}
                                    <button onClick={() => handleDeleteAll(group)} className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50">
                                      <Trash2 className="w-3.5 h-3.5" />
                                    </button>
                                 </div>
                               )}
                             </div>
-                            
-                            {/* 合併品項顯示 (用 + 號連接) */}
                             <div className="text-sm text-gray-600 mt-1 leading-relaxed">
                               {group.items.map((order, idx) => (
                                 <span key={order.id}>
@@ -905,8 +893,6 @@ export default function App() {
                                 </span>
                               ))}
                             </div>
-                            
-                            {/* 顯示所有備註 */}
                             {group.items.some(o => o.note) && (
                               <div className="mt-1.5 flex flex-wrap gap-1">
                                 {group.items.filter(o => o.note).map(o => (
