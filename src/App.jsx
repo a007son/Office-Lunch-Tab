@@ -18,7 +18,7 @@ import {
   increment,
   updateDoc,
   deleteDoc,
-  getDoc,
+  getDoc, 
   getDocs,
   writeBatch
 } from 'firebase/firestore';
@@ -26,7 +26,7 @@ import {
   Utensils, DollarSign, User, Users, Trash2, CheckCircle, LogOut, 
   ChefHat, Search, Sparkles, Camera, Loader2, X, AlertCircle, Lock, 
   MapPin, Phone, MessageSquare, Minus, Plus, Wifi, Calendar, Clock,
-  CheckSquare, Square, Settings
+  CheckSquare, Square, Settings, History
 } from 'lucide-react';
 
 // --- 1. CONFIGURATION ---
@@ -205,27 +205,23 @@ const Modal = ({ isOpen, onClose, title, children, footer }) => {
   );
 };
 
+// [修改] Login 元件：現在只讀取 LocalStorage 的歷史紀錄
 const Login = ({ onLogin, isConnected }) => {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
-  const [existingUsers, setExistingUsers] = useState([]);
+  const [historyUsers, setHistoryUsers] = useState([]);
   const [rememberMe, setRememberMe] = useState(true);
 
+  // [修改] 讀取本地歷史紀錄，而非 DB
   useEffect(() => {
-    if (!db) return;
-    const fetchUsers = async () => {
-      try {
-        const q = query(collection(db, DATA_PATH, USERS_COLLECTION), orderBy('lastActive', 'desc'));
-        const snapshot = await getDocs(q);
-        const users = snapshot.docs.map(d => d.data().name).filter(n => n);
-        setExistingUsers(users);
-      } catch (e) {
-        console.error("Failed to fetch users", e);
-      }
-    };
-    fetchUsers();
-  }, [isConnected]);
+    try {
+      const history = JSON.parse(localStorage.getItem('lunch_user_history') || '[]');
+      setHistoryUsers(history);
+    } catch (e) {
+      console.error("Failed to read local history", e);
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -234,6 +230,14 @@ const Login = ({ onLogin, isConnected }) => {
     onLogin(name.trim(), rememberMe);
     setLoading(false);
   };
+  
+  const clearHistory = (e) => {
+    e.stopPropagation();
+    if(confirm('確定要清除本機的登入紀錄嗎？')) {
+      localStorage.removeItem('lunch_user_history');
+      setHistoryUsers([]);
+    }
+  }
 
   return (
     // 維持之前的修正：items-start + pt-20
@@ -247,11 +251,16 @@ const Login = ({ onLogin, isConnected }) => {
         <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">辦公室午餐記帳通</h1>
         <p className="text-center text-gray-500 mb-6">每週結帳．AI 智慧菜單</p>
         
-        {existingUsers.length > 0 && (
-          <div className="mb-6">
-            <p className="text-xs text-gray-400 mb-2 font-medium text-center">快速登入</p>
+        {historyUsers.length > 0 && (
+          <div className="mb-6 relative group">
+             <div className="flex justify-between items-center mb-2 px-1">
+                <p className="text-xs text-gray-400 font-medium">快速登入 (本機紀錄)</p>
+                <button onClick={clearHistory} className="text-xs text-gray-300 hover:text-red-400 flex items-center gap-1">
+                  <Trash2 className="w-3 h-3"/> 清除
+                </button>
+             </div>
             <div className="flex flex-wrap gap-2 justify-center max-h-32 overflow-y-auto p-1">
-              {existingUsers.map(u => (
+              {historyUsers.map(u => (
                 <button
                   key={u}
                   onClick={() => setName(u)}
@@ -600,8 +609,21 @@ export default function App() {
     });
   };
 
+  // [修改] 登入處理：寫入本機歷史紀錄
   const handleLogin = (name, remember) => {
     setUserName(name);
+    
+    // 更新本機歷史紀錄 (存入不重複的最近 5 筆)
+    try {
+      let history = JSON.parse(localStorage.getItem('lunch_user_history') || '[]');
+      if (!history.includes(name)) {
+        history = [name, ...history].slice(0, 5);
+        localStorage.setItem('lunch_user_history', JSON.stringify(history));
+      }
+    } catch (e) {
+      console.error("Local storage error", e);
+    }
+
     if (remember) {
       localStorage.setItem('lunch_username', name);
       sessionStorage.setItem('lunch_username', name);
