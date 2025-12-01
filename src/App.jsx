@@ -19,13 +19,14 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
-  getDocs
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   Utensils, DollarSign, User, Users, Trash2, CheckCircle, LogOut, 
   ChefHat, Search, Sparkles, Camera, Loader2, X, AlertCircle, Lock, 
   MapPin, Phone, MessageSquare, Minus, Plus, Wifi, Calendar, Clock,
-  CheckSquare, Square
+  CheckSquare, Square, Settings
 } from 'lucide-react';
 
 // --- 1. CONFIGURATION ---
@@ -186,8 +187,12 @@ const Modal = ({ isOpen, onClose, title, children, footer }) => {
     // 這樣在手機上鍵盤彈出時，Modal 不會因為試圖「置中」而被擠到外太空去
     <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 pt-24 md:pt-4 bg-black/40 backdrop-blur-sm transition-opacity">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 relative z-10 flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-gray-100">
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center">
           <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+          {/* 增加右上角關閉按鈕，方便操作 */}
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
         </div>
         <div className="p-6 overflow-y-auto text-gray-600 text-sm">
           {children}
@@ -337,7 +342,7 @@ export default function App() {
   });
   
   const [currentMenu, setCurrentMenu] = useState({ 
-    items: [], imageUrl: '', restaurant: { name: '', phone: '', address: '' }, orderDeadline: '' 
+    items: [], imageUrl: '', restaurant: { name: '', phone: '', address: '' }, orderDeadline: '', menuDate: ''
   });
   const [usersMap, setUsersMap] = useState({});
   const [todayOrders, setTodayOrders] = useState([]);
@@ -397,10 +402,8 @@ export default function App() {
           ? { name: data.restaurant, phone: '', address: '' } 
           : (data.restaurant || { name: '', phone: '', address: '' });
         
-        // [新增功能] 檢查菜單日期
-        const todayStr = getTodayString();
-        // 如果資料庫有日期且不是今天，就視為過期 (顯示空菜單)
-        // 注意：這裡只是前端過濾顯示，並未刪除後端資料
+        // [新增功能] 檢查菜單日期        
+		const todayStr = new Date().toLocaleDateString('en-CA'); //如果資料庫有日期且不是今天，就視為過期								// 注意：這裡只是前端過濾顯示，並未刪除後端資料
         if (data.menuDate && data.menuDate !== todayStr) {
            setCurrentMenu({ 
              items: [], 
@@ -433,9 +436,12 @@ export default function App() {
     const ordersUnsub = onSnapshot(ordersQuery, (snapshot) => {
       const allOrders = [];
       snapshot.forEach(doc => allOrders.push({ ...doc.data(), id: doc.id }));
+      
+      // 過濾今日訂單
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       const todayList = allOrders.filter(o => o.createdAt && o.createdAt.seconds * 1000 > startOfDay.getTime());
+      
       setTodayOrders(todayList);
       setMyHistory(allOrders.filter(o => o.userName === userName));
     });
@@ -451,6 +457,28 @@ export default function App() {
 
     return () => { menuUnsub(); usersUnsub(); ordersUnsub(); };
   }, [user, userName]);
+
+  // 訂單分組邏輯 (useMemo)
+  const groupedOrders = useMemo(() => {
+    const groups = {};
+    todayOrders.forEach(order => {
+      if (!groups[order.userName]) {
+        groups[order.userName] = {
+          userName: order.userName,
+          items: [],
+          totalPrice: 0,
+          userId: order.userId
+        };
+      }
+      groups[order.userName].items.push(order);
+      groups[order.userName].totalPrice += (order.price || 0);
+    });
+    return Object.values(groups).sort((a, b) => {
+      if (a.userName === userName) return -1;
+      if (b.userName === userName) return 1;
+      return 0; 
+    });
+  }, [todayOrders, userName]);
 
   const groupedHistory = useMemo(() => {
     const groups = {};
@@ -487,6 +515,55 @@ export default function App() {
     setAdminPin(''); setPinError(''); setOrderQuantity(1); setOrderNote('');
   };
 
+  // 處理訂單操作 (刪除單項 / 刪除整單)
+  const handleOrderAction = async () => {
+    const { type, data } = modalConfig;
+    
+    try {
+      if (type === 'DELETE_SINGLE_ITEM') {
+        // 刪除單一訂單
+        await deleteDoc(doc(db, DATA_PATH, ORDERS_COLLECTION, data.id));
+        // 更新餘額
+        await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.userName), { 
+          balance: increment(-data.price) 
+        });
+        
+        // 如果這是該用戶的最後一筆訂單，Modal 會自動變空，建議關閉
+        // 這裡為了簡單，刪除後重新整理 current modal data
+        const updatedItems = modalConfig.data.allItems.filter(i => i.id !== data.id);
+        if (updatedItems.length === 0) {
+          closeModal();
+        } else {
+           // 更新 Modal 內的資料顯示 (這裡其實因為 data 是傳值，UI 不會自動更新，通常建議直接關閉 Modal 或重新 fetch)
+           // 為了 UX 流暢，我們選擇關閉 Modal，讓使用者在外層看到更新
+           closeModal(); 
+        }
+      } 
+      else if (type === 'DELETE_ALL_ORDERS') {
+        // 批次刪除該用戶今日所有訂單
+        const batch = writeBatch(db);
+        const userOrders = todayOrders.filter(o => o.userName === data.userName);
+        let totalRefund = 0;
+
+        userOrders.forEach(order => {
+          const orderRef = doc(db, DATA_PATH, ORDERS_COLLECTION, order.id);
+          batch.delete(orderRef);
+          totalRefund += (order.price || 0);
+        });
+
+        // 扣回餘額
+        const userRef = doc(db, DATA_PATH, USERS_COLLECTION, data.userName);
+        batch.update(userRef, { balance: increment(-totalRefund) });
+
+        await batch.commit();
+        closeModal();
+      }
+    } catch (e) {
+      console.error("刪除失敗", e);
+      alert("刪除失敗，請稍後再試");
+    }
+  };
+
   const confirmModal = async () => {
     const { type, data } = modalConfig;
     if (type === 'ADMIN_LOGIN') {
@@ -503,14 +580,34 @@ export default function App() {
         balance: increment(finalPrice), lastActive: serverTimestamp()
       });
       setSearchTerm(''); closeModal();
-    } else if (type === 'CANCEL_ORDER') {
-      await deleteDoc(doc(db, DATA_PATH, ORDERS_COLLECTION, data.orderId));
-      await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.orderUser), { balance: increment(-data.price) });
-      closeModal();
+										 
+																		   
+																												 
+				   
     } else if (type === 'SETTLE_DEBT') {
       await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.targetUser), { balance: increment(-data.amount) });
       closeModal();
+    } else if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS') {
+      handleOrderAction();
     }
+  };
+
+  // 處理點擊齒輪：顯示詳細訂單管理 Modal
+  const handleManageOrder = (group) => {
+    setModalConfig({ 
+      isOpen: true, 
+      type: 'MANAGE_ORDER', 
+      data: group 
+    });
+  };
+
+  // 處理點擊垃圾桶：確認刪除整單
+  const handleDeleteAll = (group) => {
+    setModalConfig({ 
+      isOpen: true, 
+      type: 'CONFIRM_DELETE_ALL', 
+      data: group 
+    });
   };
 
   const handleLogin = (name, remember) => {
@@ -538,10 +635,10 @@ export default function App() {
     if (isOrderingClosed && !isAdminMode) return; 
     setOrderQuantity(1); setOrderNote(''); setModalConfig({ isOpen: true, type: 'PLACE_ORDER', data: item });
   };
-  const handleCancelOrder = (orderId, price, orderUser) => {
-    if (!isAdminMode && orderUser !== userName) return;
-    setModalConfig({ isOpen: true, type: 'CANCEL_ORDER', data: { orderId, price, orderUser } });
-  };
+															
+													   
+																								
+	
   const handleSettleDebt = (targetUser, amount) => {
     setModalConfig({ isOpen: true, type: 'SETTLE_DEBT', data: { targetUser, amount } });
   };
@@ -558,13 +655,13 @@ export default function App() {
       const newRestaurant = result.restaurant || { name: "AI 辨識餐廳", phone: "", address: "" };
       const newItems = (result.items || []).map((i, idx) => ({ ...i, id: Date.now() + idx }));
       
-      // [更新] 寫入時加上今天的日期				
+      // [更新] 寫入時加上今天的日期
       await setDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), {
         items: newItems, 
         imageUrl: compressedDataUrl, 
         restaurant: newRestaurant, 
         orderDeadline: currentMenu.orderDeadline || '',
-        menuDate: getTodayString() // 紀錄今天的日期		   
+        menuDate: getTodayString() // 紀錄今天的日期
       }, { merge: true });
 
     } catch (err) { 
@@ -601,11 +698,45 @@ export default function App() {
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'ADMIN_LOGIN'} onClose={closeModal} title="管理員驗證" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">驗證</button></>}>
         <div className="flex flex-col gap-4"><div className="bg-orange-50 p-3 rounded-lg flex items-center gap-3 text-orange-800 text-sm"><Lock className="w-4 h-4" /><p>請輸入通行碼</p></div><input type="password" autoFocus className="w-full border border-gray-300 p-3 rounded-lg text-center text-2xl tracking-widest outline-none focus:ring-2 focus:ring-orange-500" placeholder="••••" maxLength={4} value={adminPin} onChange={(e) => { setAdminPin(e.target.value); setPinError(''); }} onKeyDown={(e) => e.key === 'Enter' && confirmModal()} />{pinError && <p className="text-red-500 text-sm mt-2 text-center">{pinError}</p>}</div>
       </Modal>
+      
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'PLACE_ORDER'} onClose={closeModal} title="確認點餐" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">確認下單 (${modalConfig.data?.price * (orderQuantity === '' ? 1 : orderQuantity)})</button></>}>
         <div className="space-y-6"><div className="flex justify-between items-start"><div><p className="text-xs text-gray-400 mb-1">品項</p><p className="text-xl font-bold text-gray-800">{modalConfig.data?.name}</p></div><p className="text-xl font-bold text-orange-600">${modalConfig.data?.price}</p></div><div><p className="text-xs text-gray-400 mb-2">數量</p><div className="flex items-center gap-4"><button onClick={() => setOrderQuantity(Math.max(1, (orderQuantity === '' ? 1 : orderQuantity) - 1))} className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"><Minus className="w-4 h-4" /></button><input type="number" min="1" className="w-16 text-center border border-gray-300 rounded-lg py-2 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-orange-500" value={orderQuantity} onChange={(e) => { const val = e.target.value; if (val === '') setOrderQuantity(''); else { const num = parseInt(val); if (!isNaN(num) && num > 0) setOrderQuantity(num); } }} onBlur={() => { if (orderQuantity === '' || orderQuantity < 1) setOrderQuantity(1); }} /><button onClick={() => setOrderQuantity((orderQuantity === '' ? 1 : orderQuantity) + 1)} className="w-10 h-10 rounded-full border border-orange-200 bg-orange-50 flex items-center justify-center text-orange-600 hover:bg-orange-100"><Plus className="w-4 h-4" /></button></div></div><div><p className="text-xs text-gray-400 mb-2">備註 (選填)</p><textarea className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-none h-20" placeholder="例如：不要香菜..." value={orderNote} onChange={(e) => setOrderNote(e.target.value)} onCompositionStart={() => setIsNoteComposing(true)} onCompositionEnd={(e) => { setIsNoteComposing(false); setOrderNote(e.target.value); }} /></div></div>
       </Modal>
-      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CANCEL_ORDER'} onClose={closeModal} title="取消訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">保留</button><button onClick={confirmModal} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}><p>確定要刪除這筆訂單嗎？金額將從帳本扣除。</p></Modal>
+      
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
+
+      {/* 新增：訂單管理 (齒輪) Modal */}
+      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'MANAGE_ORDER'} onClose={closeModal} title={`管理 ${modalConfig.data?.userName} 的訂單`}>
+        <div className="space-y-4">
+          {modalConfig.data?.items.map((item) => (
+            <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <div>
+                <div className="font-bold text-gray-800">{item.itemName} {item.quantity > 1 && <span className="text-orange-600">x{item.quantity}</span>}</div>
+                <div className="text-xs text-gray-500">${item.price} {item.note && `(${item.note})`}</div>
+              </div>
+              <button 
+                onClick={() => {
+                  setModalConfig({ type: 'DELETE_SINGLE_ITEM', data: { ...item, allItems: modalConfig.data.items } });
+                  confirmModal();
+                }} 
+                className="p-2 text-red-500 hover:bg-red-100 rounded-full transition"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+          <div className="pt-4 border-t text-right">
+            <span className="text-sm text-gray-500 mr-2">總計</span>
+            <span className="text-xl font-bold text-gray-800">${modalConfig.data?.totalPrice}</span>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 新增：整單刪除確認 (垃圾桶) Modal */}
+      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_ALL'} onClose={closeModal} title="刪除全部訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { setModalConfig({ ...modalConfig, type: 'DELETE_ALL_ORDERS' }); confirmModal(); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}>
+        <p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的所有訂單嗎？</p>
+        <p className="text-sm text-gray-500 mt-2">總金額 ${modalConfig.data?.totalPrice} 將會從帳本中扣除。</p>
+      </Modal>
 
       {/* Header (Fixed) */}
       <header className="bg-white shadow-sm flex-none z-20">
@@ -626,7 +757,7 @@ export default function App() {
       {/* Main Container (Flex Col) */}
       <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full overflow-hidden">
         
-        {/* 固定區域: Admin Switch + Tabs + Banner (Menu Only) + Search Bar */}
+        {/* 固定區域 */}
         <div className="flex-none bg-gray-50 z-10 relative">
             <div className="flex justify-end p-2">
               <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none group">
@@ -643,7 +774,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Banner 卡片: 獨立區塊，固定在上方 */}
+            {/* Banner 卡片: 獨立區塊，固定在上方 */} 
             {activeTab === 'menu' && (
               <div className="px-4 pt-2">
                 {isAdminMode && (
@@ -659,7 +790,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* 餐廳資訊卡片 (Banner) */}
+                {/* 餐廳資訊卡片 (Banner) */}	   
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
                    {/* [修正 3] 響應式高度：手機版 h-32 (128px)，桌機版 h-48 (192px) */}
                    <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
@@ -668,18 +799,18 @@ export default function App() {
                       <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
                         <div className="flex flex-col justify-end h-full">
                           <h2 className="font-bold text-2xl leading-tight mb-2">{currentMenu.restaurant?.name || '今日餐廳'}</h2>
-                          
+						  
                           {/* 資訊欄位 (分開呈現) */}
                           <div className="flex flex-col gap-1 text-sm text-gray-200">
                             {/* 電話欄位 */}
                             {currentMenu.restaurant?.phone && (
                               <div className="flex items-center gap-2">
                                 <Phone className="w-3.5 h-3.5" /> 
-                                {/* 電話號碼格式化 */}
+                                {/* 電話號碼格式化 */}		 
                                 {formatPhoneNumber(currentMenu.restaurant.phone)}
                               </div>
                             )}
-                            
+							
                             {/* 地址欄位 + 地圖按鈕 (優先搜尋店名) */}
                             <div className="flex items-center justify-between gap-2 mt-1">
                               {currentMenu.restaurant?.address ? (
@@ -715,7 +846,7 @@ export default function App() {
                    )}
                 </div>
 
-                {/* 搜尋列 (移到固定區) - 移除 shadow-sm 以解決陰影過深與超出卡片問題 */}
+																												 
                 <div className="bg-white rounded-t-2xl border-b border-gray-100 p-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -735,9 +866,9 @@ export default function App() {
             )}
         </div>
 
-        {/* 滾動區域 (List Only) */}
+        {/* 滾動區域 */}
         <div className="flex-1 overflow-y-auto px-4 pb-6 pt-0 bg-gray-50">
-          
+		  
           {activeTab === 'menu' && (
             <div className="space-y-6 animate-fade-in">
               {/* 卡片下半部 (List Only) */}
@@ -750,7 +881,65 @@ export default function App() {
           {activeTab === 'orders' && (
             <div className="space-y-4 animate-fade-in pt-4">
               <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center"><div><h3 className="text-blue-900 font-bold">今日訂單總覽</h3><p className="text-blue-700 text-sm">共 {todayOrders.length} 份餐點</p></div><div className="text-right"><div className="text-2xl font-bold text-blue-600">${todayOrders.reduce((sum, o) => sum + parseInt(o.price || 0), 0)}</div><div className="text-xs text-blue-400">今日總額</div></div></div>
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">{todayOrders.length === 0 ? (<div className="p-8 text-center text-gray-400">今天還沒有人點餐喔</div>) : (<ul className="divide-y divide-gray-100">{todayOrders.map((order) => (<li key={order.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition"><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${order.userName === userName ? 'bg-orange-500' : 'bg-gray-400'}`}>{order.userName.charAt(0)}</div><div><div className="font-semibold text-gray-800">{order.userName}</div><div className="text-sm text-gray-500 flex items-center gap-1">{order.itemName} {order.quantity > 1 && <span className="text-orange-600 font-bold">x{order.quantity}</span>}</div>{order.note && <div className="text-xs text-gray-400 mt-0.5 bg-gray-100 inline-block px-1.5 rounded">備註: {order.note}</div>}</div></div><div className="flex items-center gap-4"><span className="font-mono font-medium text-gray-600">${order.price}</span>{(isAdminMode || order.userName === userName) && <button onClick={() => handleCancelOrder(order.id, order.price, order.userName)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>}</div></li>))}</ul>)}</div>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                {todayOrders.length === 0 ? (<div className="p-8 text-center text-gray-400">今天還沒有人點餐喔</div>) : (
+                  <ul className="divide-y divide-gray-100">
+                    {/* 訂單合併邏輯：同一人顯示一行 */}
+                    {groupedOrders.map((group) => (
+                      <li key={group.userName} className="p-4 flex items-start justify-between hover:bg-gray-50 transition">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${group.userName === userName ? 'bg-orange-500' : 'bg-gray-400'}`}>
+                            {group.userName.charAt(0)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-semibold text-gray-800 flex items-center gap-2">
+                              {group.userName}
+                              {/* 操作按鈕區域 */}
+                              {(isAdminMode || group.userName === userName) && (
+                                <div className="flex items-center gap-1 ml-2">
+                                   {/* 齒輪：個別刪除 */}
+                                   <button onClick={() => handleManageOrder(group)} className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-200">
+                                     <Settings className="w-3.5 h-3.5" />
+                                   </button>
+                                   {/* 垃圾桶：整單刪除 */}
+                                   <button onClick={() => handleDeleteAll(group)} className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50">
+                                     <Trash2 className="w-3.5 h-3.5" />
+                                   </button>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* 合併品項顯示 (用 + 號連接) */}
+                            <div className="text-sm text-gray-600 mt-1 leading-relaxed">
+                              {group.items.map((order, idx) => (
+                                <span key={order.id}>
+                                  {idx > 0 && <span className="mx-1 text-gray-400 font-light">+</span>}
+                                  <span>{order.itemName}</span>
+                                  {order.quantity > 1 && <span className="text-orange-600 font-bold ml-0.5">x{order.quantity}</span>}
+                                </span>
+                              ))}
+                            </div>
+                            
+                            {/* 顯示所有備註 */}
+                            {group.items.some(o => o.note) && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {group.items.filter(o => o.note).map(o => (
+                                  <span key={o.id} className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                    {o.itemName}: {o.note}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="font-mono font-medium text-gray-600 shrink-0 ml-2">
+                          ${group.totalPrice}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           )}
 
@@ -769,5 +958,3 @@ export default function App() {
     </div>
   );
 }
-
-
