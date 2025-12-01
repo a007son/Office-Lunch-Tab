@@ -101,12 +101,10 @@ const formatPhoneNumber = (phoneNumber) => {
   if (!phoneNumber) return '';
   const cleaned = ('' + phoneNumber).replace(/\D/g, '');
   
-  // 手機 (10碼) -> 0912-345678
   if (cleaned.length === 10 && cleaned.startsWith('09')) {
     return `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
   }
 
-  // 市話 (9碼或10碼，含區碼)
   if (cleaned.startsWith('0') && cleaned.length >= 9) {
     if (['02', '04', '07'].includes(cleaned.slice(0, 2))) {
        return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
@@ -183,12 +181,10 @@ const analyzeImage = async (base64Image) => {
 const Modal = ({ isOpen, onClose, title, children, footer }) => {
   if (!isOpen) return null;
   return (
-    // [修正] Mobile: items-start + pt-24 (固定頂部距離), Desktop: items-center (垂直置中)
     <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 pt-24 md:pt-4 bg-black/40 backdrop-blur-sm transition-opacity">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 relative z-10 flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
           <h3 className="text-lg font-bold text-gray-900">{title}</h3>
-          {/* 增加右上角關閉按鈕，方便操作 */}
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
@@ -237,7 +233,6 @@ const Login = ({ onLogin, isConnected }) => {
   };
 
   return (
-    // 維持之前的修正：items-start + pt-20
     <div className="min-h-screen bg-orange-50 flex items-start md:items-center justify-center p-4 pt-20 md:pt-0 relative">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border-t-4 border-orange-500">
         <div className="flex justify-center mb-6">
@@ -393,7 +388,6 @@ export default function App() {
   useEffect(() => {
     if (!user || !userName || !db) return;
 
-    // 監聽菜單
     const menuUnsub = onSnapshot(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -401,16 +395,14 @@ export default function App() {
           ? { name: data.restaurant, phone: '', address: '' } 
           : (data.restaurant || { name: '', phone: '', address: '' });
         
-        // [新增功能] 檢查菜單日期
         const todayStr = getTodayString();
-        // 如果資料庫有日期且不是今天，就視為過期 (顯示空菜單)
         if (data.menuDate && data.menuDate !== todayStr) {
            setCurrentMenu({ 
              items: [], 
              imageUrl: '', 
              restaurant: { name: '', phone: '', address: '' }, 
              orderDeadline: '',
-             menuDate: data.menuDate // 保留舊日期以便 debug 或顯示
+             menuDate: data.menuDate
            });
         } else {
            setCurrentMenu({ 
@@ -425,9 +417,18 @@ export default function App() {
       }
     });
 
+    // [重構] UsersMap 資料正規化
     const usersUnsub = onSnapshot(collection(db, DATA_PATH, USERS_COLLECTION), (snapshot) => {
       const map = {};
-      snapshot.forEach(doc => map[doc.id] = { ...doc.data(), id: doc.id });
+      snapshot.forEach(doc => {
+        const userData = doc.data();
+        map[doc.id] = { 
+          id: doc.id,
+          name: userData.name || 'Unknown',
+          balance: typeof userData.balance === 'number' ? userData.balance : 0, // 確保 balance 是數字
+          lastActive: userData.lastActive
+        };
+      });
       setUsersMap(map);
     });
 
@@ -436,7 +437,6 @@ export default function App() {
       const allOrders = [];
       snapshot.forEach(doc => allOrders.push({ ...doc.data(), id: doc.id }));
       
-      // 過濾今日訂單
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       const todayList = allOrders.filter(o => o.createdAt && o.createdAt.seconds * 1000 > startOfDay.getTime());
@@ -457,7 +457,6 @@ export default function App() {
     return () => { menuUnsub(); usersUnsub(); ordersUnsub(); };
   }, [user, userName]);
 
-  // 訂單分組邏輯 (useMemo)
   const groupedOrders = useMemo(() => {
     const groups = {};
     todayOrders.forEach(order => {
@@ -495,6 +494,7 @@ export default function App() {
     return item.name.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
+  // 確保 usersMap[userName] 有值，避免 null pointer
   const myUser = usersMap[userName] || { balance: 0, name: userName };
   const totalDebt = Object.values(usersMap).reduce((acc, curr) => acc + (curr.balance || 0), 0);
 
@@ -513,19 +513,16 @@ export default function App() {
     setAdminPin(''); setPinError(''); setOrderQuantity(1); setOrderNote('');
   };
 
-  // 處理訂單操作 (刪除單項 / 刪除整單)
+  // 處理訂單操作
   const handleOrderAction = async () => {
     const { type, data } = modalConfig;
     
     try {
       if (type === 'DELETE_SINGLE_ITEM') {
-        // 刪除單一訂單
         await deleteDoc(doc(db, DATA_PATH, ORDERS_COLLECTION, data.id));
-        // 更新餘額
         await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.userName), { 
           balance: increment(-data.price) 
         });
-        
         const updatedItems = modalConfig.data.allItems.filter(i => i.id !== data.id);
         if (updatedItems.length === 0) {
           closeModal();
@@ -534,7 +531,6 @@ export default function App() {
         }
       } 
       else if (type === 'DELETE_ALL_ORDERS') {
-        // 批次刪除該用戶今日所有訂單
         const batch = writeBatch(db);
         const userOrders = todayOrders.filter(o => o.userName === data.userName);
         let totalRefund = 0;
@@ -545,7 +541,6 @@ export default function App() {
           totalRefund += (order.price || 0);
         });
 
-        // 扣回餘額
         const userRef = doc(db, DATA_PATH, USERS_COLLECTION, data.userName);
         batch.update(userRef, { balance: increment(-totalRefund) });
 
@@ -582,7 +577,6 @@ export default function App() {
     }
   };
 
-  // 處理點擊齒輪：顯示詳細訂單管理 Modal
   const handleManageOrder = (group) => {
     setModalConfig({ 
       isOpen: true, 
@@ -591,7 +585,6 @@ export default function App() {
     });
   };
 
-  // 處理點擊垃圾桶：確認刪除整單
   const handleDeleteAll = (group) => {
     setModalConfig({ 
       isOpen: true, 
@@ -600,9 +593,13 @@ export default function App() {
     });
   };
 
-  // 結帳收款：傳入 ID 和 amount
-  const handleSettleDebt = (targetUserId, amount) => {
-    setModalConfig({ isOpen: true, type: 'SETTLE_DEBT', data: { targetUser: targetUserId, amount } });
+  // [修復] 傳入使用者 ID (targetUserId)、金額 (amount) 與 顯示名稱 (targetUserName)
+  const handleSettleDebt = (targetUserId, amount, targetUserName) => {
+    setModalConfig({ 
+      isOpen: true, 
+      type: 'SETTLE_DEBT', 
+      data: { targetUser: targetUserId, amount, targetUserName } // 傳入 name 供顯示
+    });
   };
 
   const handleLogin = (name, remember) => {
@@ -634,7 +631,6 @@ export default function App() {
     if (!isAdminMode && orderUser !== userName) return;
     setModalConfig({ isOpen: true, type: 'CANCEL_ORDER', data: { orderId, price, orderUser } });
   };
-
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -648,13 +644,12 @@ export default function App() {
       const newRestaurant = result.restaurant || { name: "AI 辨識餐廳", phone: "", address: "" };
       const newItems = (result.items || []).map((i, idx) => ({ ...i, id: Date.now() + idx }));
       
-      // [更新] 寫入時加上今天的日期
       await setDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), {
         items: newItems, 
         imageUrl: compressedDataUrl, 
         restaurant: newRestaurant, 
         orderDeadline: currentMenu.orderDeadline || '',
-        menuDate: getTodayString() // 紀錄今天的日期
+        menuDate: getTodayString()
       }, { merge: true });
 
     } catch (err) { 
@@ -696,10 +691,8 @@ export default function App() {
         <div className="space-y-6"><div className="flex justify-between items-start"><div><p className="text-xs text-gray-400 mb-1">品項</p><p className="text-xl font-bold text-gray-800">{modalConfig.data?.name}</p></div><p className="text-xl font-bold text-orange-600">${modalConfig.data?.price}</p></div><div><p className="text-xs text-gray-400 mb-2">數量</p><div className="flex items-center gap-4"><button onClick={() => setOrderQuantity(Math.max(1, (orderQuantity === '' ? 1 : orderQuantity) - 1))} className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"><Minus className="w-4 h-4" /></button><input type="number" min="1" className="w-16 text-center border border-gray-300 rounded-lg py-2 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-orange-500" value={orderQuantity} onChange={(e) => { const val = e.target.value; if (val === '') setOrderQuantity(''); else { const num = parseInt(val); if (!isNaN(num) && num > 0) setOrderQuantity(num); } }} onBlur={() => { if (orderQuantity === '' || orderQuantity < 1) setOrderQuantity(1); }} /><button onClick={() => setOrderQuantity((orderQuantity === '' ? 1 : orderQuantity) + 1)} className="w-10 h-10 rounded-full border border-orange-200 bg-orange-50 flex items-center justify-center text-orange-600 hover:bg-orange-100"><Plus className="w-4 h-4" /></button></div></div><div><p className="text-xs text-gray-400 mb-2">備註 (選填)</p><textarea className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-none h-20" placeholder="例如：不要香菜..." value={orderNote} onChange={(e) => setOrderNote(e.target.value)} onCompositionStart={() => setIsNoteComposing(true)} onCompositionEnd={(e) => { setIsNoteComposing(false); setOrderNote(e.target.value); }} /></div></div>
       </Modal>
       
-      {/* 修正：保留單一正確的 SETTLE_DEBT Modal */}
-      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{usersMap[modalConfig.data?.targetUser]?.name}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
+      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUserName || modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
 
-      {/* 新增：訂單管理 (齒輪) Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'MANAGE_ORDER'} onClose={closeModal} title={`管理 ${modalConfig.data?.userName} 的訂單`}>
         <div className="space-y-4">
           {modalConfig.data?.items.map((item) => (
@@ -726,13 +719,11 @@ export default function App() {
         </div>
       </Modal>
 
-      {/* 新增：整單刪除確認 (垃圾桶) Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_ALL'} onClose={closeModal} title="刪除全部訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { setModalConfig({ ...modalConfig, type: 'DELETE_ALL_ORDERS' }); confirmModal(); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}>
         <p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的所有訂單嗎？</p>
         <p className="text-sm text-gray-500 mt-2">總金額 ${modalConfig.data?.totalPrice} 將會從帳本中扣除。</p>
       </Modal>
 
-      {/* Header (Fixed) */}
       <header className="bg-white shadow-sm flex-none z-20">
         <div className="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -748,10 +739,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Container (Flex Col) */}
       <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full overflow-hidden">
         
-        {/* 固定區域 */}
         <div className="flex-none bg-gray-50 z-10 relative">
             <div className="flex justify-end p-2">
               <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none group">
@@ -848,7 +837,6 @@ export default function App() {
             )}
         </div>
 
-        {/* 滾動區域 */}
         <div className="flex-1 overflow-y-auto px-4 pb-6 pt-0 bg-gray-50">
           {activeTab === 'menu' && (
             <div className="space-y-6 animate-fade-in">
@@ -922,7 +910,7 @@ export default function App() {
                 <div className="flex items-end justify-between mb-4"><div><div className="text-4xl font-bold text-gray-800">${myUser.balance}</div><div className="text-sm text-gray-400 mt-1">目前累積欠款</div></div>{myUser.balance > 0 ? (<div className="text-right"><span className="inline-block bg-red-100 text-red-600 text-xs px-2 py-1 rounded mb-1">尚未付款</span><p className="text-xs text-gray-400">請找管理員結帳</p></div>) : (<div className="flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold"><CheckCircle className="w-4 h-4" /> 無欠款</div>)}</div>
                 <div className="border-t pt-4"><h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">每日消費明細</h4><div className="space-y-4">{groupedHistory.length > 0 ? groupedHistory.map(group => (<div key={group.date} className="bg-gray-50 rounded-lg p-3"><div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-200"><span className="text-xs font-bold text-gray-500 flex items-center gap-1"><Calendar className="w-3 h-3"/> {group.date}</span><span className="text-xs font-bold text-gray-800">合計 ${group.total}</span></div><div className="space-y-2">{group.orders.map(h => (<div key={h.id} className="flex justify-between text-sm pl-2 border-l-2 border-orange-200"><span className="text-gray-600">{h.itemName} {h.quantity > 1 && `x${h.quantity}`}</span><span className="text-gray-900 font-medium">${h.price}</span></div>))}</div></div>)) : <div className="text-gray-400 text-sm italic text-center py-4">尚無紀錄</div>}</div></div>
               </div>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"><div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-gray-700 flex items-center gap-2"><Users className="w-4 h-4" /> 辦公室總帳</h3><span className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">總欠款: ${totalDebt}</span></div><div className="divide-y divide-gray-100">{Object.values(usersMap).sort((a, b) => b.balance - a.balance).map(u => (<div key={u.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold">{u.name.charAt(0)}</div><div><div className="font-medium text-gray-900">{u.name}</div><div className={`text-xs ${u.balance > 0 ? 'text-red-500' : 'text-green-500'}`}>{u.balance > 0 ? '未結清' : '已結清'}</div></div></div><div className="flex items-center gap-4"><div className="text-right"><span className={`font-bold ${u.balance > 0 ? 'text-gray-800' : 'text-gray-300'}`}>${u.balance}</span></div>{isAdminMode && u.balance > 0 && (<button onClick={() => handleSettleDebt(u.id, u.balance)} className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-200 transition">收款</button>)}</div></div>))}</div></div>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"><div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-gray-700 flex items-center gap-2"><Users className="w-4 h-4" /> 辦公室總帳</h3><span className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">總欠款: ${totalDebt}</span></div><div className="divide-y divide-gray-100">{Object.values(usersMap).sort((a, b) => b.balance - a.balance).map(u => (<div key={u.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold">{u.name.charAt(0)}</div><div><div className="font-medium text-gray-900">{u.name}</div><div className={`text-xs ${u.balance > 0 ? 'text-red-500' : 'text-green-500'}`}>{u.balance > 0 ? '未結清' : '已結清'}</div></div></div><div className="flex items-center gap-4"><div className="text-right"><span className={`font-bold ${u.balance > 0 ? 'text-gray-800' : 'text-gray-300'}`}>${u.balance}</span></div>{isAdminMode && u.balance > 0 && (<button onClick={() => handleSettleDebt(u.id, u.balance, u.name)} className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-200 transition">收款</button>)}</div></div>))}</div></div>
             </div>
           )}
         </div>
