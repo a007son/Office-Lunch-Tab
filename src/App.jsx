@@ -402,8 +402,9 @@ export default function App() {
           ? { name: data.restaurant, phone: '', address: '' } 
           : (data.restaurant || { name: '', phone: '', address: '' });
         
-        // [新增功能] 檢查菜單日期        
-		const todayStr = new Date().toLocaleDateString('en-CA'); //如果資料庫有日期且不是今天，就視為過期								// 注意：這裡只是前端過濾顯示，並未刪除後端資料
+        // [新增功能] 檢查菜單日期
+        const todayStr = getTodayString();
+        // 如果資料庫有日期且不是今天，就視為過期 (顯示空菜單)
         if (data.menuDate && data.menuDate !== todayStr) {
            setCurrentMenu({ 
              items: [], 
@@ -424,7 +425,6 @@ export default function App() {
         setCurrentMenu({ items: [], imageUrl: '', restaurant: { name: '尚未設定', phone: '', address: '' }, orderDeadline: '', menuDate: '' });
       }
     });
-
 
     const usersUnsub = onSnapshot(collection(db, DATA_PATH, USERS_COLLECTION), (snapshot) => {
       const map = {};
@@ -501,7 +501,6 @@ export default function App() {
 
   const isOrderingClosed = useMemo(() => {
     if (!currentMenu.orderDeadline) return false;
-    // 如果是過期菜單，直接視為關閉
     if (currentMenu.menuDate && currentMenu.menuDate !== getTodayString()) return true;
 
     const [hours, minutes] = currentMenu.orderDeadline.split(':');
@@ -534,7 +533,7 @@ export default function App() {
         if (updatedItems.length === 0) {
           closeModal();
         } else {
-           // 更新 Modal 內的資料顯示 (這裡其實因為 data 是傳值，UI 不會自動更新，通常建議直接關閉 Modal 或重新 fetch)
+           // 更新 Modal 內的資料顯示 (這裡其實因為 data 是傳值，UI 不會自動更新，通常建議直接關閉 Modal)
            // 為了 UX 流暢，我們選擇關閉 Modal，讓使用者在外層看到更新
            closeModal(); 
         }
@@ -580,10 +579,6 @@ export default function App() {
         balance: increment(finalPrice), lastActive: serverTimestamp()
       });
       setSearchTerm(''); closeModal();
-										 
-																		   
-																												 
-				   
     } else if (type === 'SETTLE_DEBT') {
       await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.targetUser), { balance: increment(-data.amount) });
       closeModal();
@@ -608,6 +603,11 @@ export default function App() {
       type: 'CONFIRM_DELETE_ALL', 
       data: group 
     });
+  };
+
+  // [修復] 結帳收款：傳入 ID (作為 userRef key) 和 amount
+  const handleSettleDebt = (targetUserId, amount) => {
+    setModalConfig({ isOpen: true, type: 'SETTLE_DEBT', data: { targetUser: targetUserId, amount } });
   };
 
   const handleLogin = (name, remember) => {
@@ -635,13 +635,11 @@ export default function App() {
     if (isOrderingClosed && !isAdminMode) return; 
     setOrderQuantity(1); setOrderNote(''); setModalConfig({ isOpen: true, type: 'PLACE_ORDER', data: item });
   };
-															
-													   
-																								
-	
-  const handleSettleDebt = (targetUser, amount) => {
-    setModalConfig({ isOpen: true, type: 'SETTLE_DEBT', data: { targetUser, amount } });
+  const handleCancelOrder = (orderId, price, orderUser) => {
+    if (!isAdminMode && orderUser !== userName) return;
+    setModalConfig({ isOpen: true, type: 'CANCEL_ORDER', data: { orderId, price, orderUser } });
   };
+
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -696,13 +694,14 @@ export default function App() {
     <div className="bg-gray-50 h-screen flex flex-col text-gray-800 font-sans overflow-hidden">
       {/* Modals */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'ADMIN_LOGIN'} onClose={closeModal} title="管理員驗證" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">驗證</button></>}>
-        <div className="flex flex-col gap-4"><div className="bg-orange-50 p-3 rounded-lg flex items-center gap-3 text-orange-800 text-sm"><Lock className="w-4 h-4" /><p>請輸入通行碼</p></div><input type="password" autoFocus className="w-full border border-gray-300 p-3 rounded-lg text-center text-2xl tracking-widest outline-none focus:ring-2 focus:ring-orange-500" placeholder="••••" maxLength={4} value={adminPin} onChange={(e) => { setAdminPin(e.target.value); setPinError(''); }} onKeyDown={(e) => e.key === 'Enter' && confirmModal()} />{pinError && <p className="text-red-500 text-sm mt-2 text-center">{pinError}</p>}</div>
+        <div className="flex flex-col gap-4"><div className="bg-orange-50 p-3 rounded-lg flex items-center gap-3 text-orange-800 text-sm"><Lock className="w-4 h-4" /><p>請輸入通行碼 (預設: 8888)</p></div><input type="password" autoFocus className="w-full border border-gray-300 p-3 rounded-lg text-center text-2xl tracking-widest outline-none focus:ring-2 focus:ring-orange-500" placeholder="••••" maxLength={4} value={adminPin} onChange={(e) => { setAdminPin(e.target.value); setPinError(''); }} onKeyDown={(e) => e.key === 'Enter' && confirmModal()} />{pinError && <p className="text-red-500 text-sm mt-2 text-center">{pinError}</p>}</div>
       </Modal>
       
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'PLACE_ORDER'} onClose={closeModal} title="確認點餐" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">確認下單 (${modalConfig.data?.price * (orderQuantity === '' ? 1 : orderQuantity)})</button></>}>
         <div className="space-y-6"><div className="flex justify-between items-start"><div><p className="text-xs text-gray-400 mb-1">品項</p><p className="text-xl font-bold text-gray-800">{modalConfig.data?.name}</p></div><p className="text-xl font-bold text-orange-600">${modalConfig.data?.price}</p></div><div><p className="text-xs text-gray-400 mb-2">數量</p><div className="flex items-center gap-4"><button onClick={() => setOrderQuantity(Math.max(1, (orderQuantity === '' ? 1 : orderQuantity) - 1))} className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"><Minus className="w-4 h-4" /></button><input type="number" min="1" className="w-16 text-center border border-gray-300 rounded-lg py-2 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-orange-500" value={orderQuantity} onChange={(e) => { const val = e.target.value; if (val === '') setOrderQuantity(''); else { const num = parseInt(val); if (!isNaN(num) && num > 0) setOrderQuantity(num); } }} onBlur={() => { if (orderQuantity === '' || orderQuantity < 1) setOrderQuantity(1); }} /><button onClick={() => setOrderQuantity((orderQuantity === '' ? 1 : orderQuantity) + 1)} className="w-10 h-10 rounded-full border border-orange-200 bg-orange-50 flex items-center justify-center text-orange-600 hover:bg-orange-100"><Plus className="w-4 h-4" /></button></div></div><div><p className="text-xs text-gray-400 mb-2">備註 (選填)</p><textarea className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-none h-20" placeholder="例如：不要香菜..." value={orderNote} onChange={(e) => setOrderNote(e.target.value)} onCompositionStart={() => setIsNoteComposing(true)} onCompositionEnd={(e) => { setIsNoteComposing(false); setOrderNote(e.target.value); }} /></div></div>
       </Modal>
       
+      {/* [修復] 這是之前被重複定義，導致白畫面的主因。現在只保留這一個正確的 SETTLE_DEBT Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
 
       {/* 新增：訂單管理 (齒輪) Modal */}
@@ -774,7 +773,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Banner 卡片: 獨立區塊，固定在上方 */} 
             {activeTab === 'menu' && (
               <div className="px-4 pt-2">
                 {isAdminMode && (
@@ -790,28 +788,19 @@ export default function App() {
                   </div>
                 )}
 
-                {/* 餐廳資訊卡片 (Banner) */}	   
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
-                   {/* [修正 3] 響應式高度：手機版 h-32 (128px)，桌機版 h-48 (192px) */}
                    <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
-                      {/* 如果有圖就顯示圖，沒圖(被日期過濾掉)顯示預設背景 */}
                       {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
                       <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
                         <div className="flex flex-col justify-end h-full">
                           <h2 className="font-bold text-2xl leading-tight mb-2">{currentMenu.restaurant?.name || '今日餐廳'}</h2>
-						  
-                          {/* 資訊欄位 (分開呈現) */}
                           <div className="flex flex-col gap-1 text-sm text-gray-200">
-                            {/* 電話欄位 */}
                             {currentMenu.restaurant?.phone && (
                               <div className="flex items-center gap-2">
                                 <Phone className="w-3.5 h-3.5" /> 
-                                {/* 電話號碼格式化 */}		 
                                 {formatPhoneNumber(currentMenu.restaurant.phone)}
                               </div>
                             )}
-							
-                            {/* 地址欄位 + 地圖按鈕 (優先搜尋店名) */}
                             <div className="flex items-center justify-between gap-2 mt-1">
                               {currentMenu.restaurant?.address ? (
                                 <div className="flex items-center gap-2 truncate">
@@ -821,7 +810,6 @@ export default function App() {
                               ) : (
                                 <div></div>
                               )}
-                              {/* 即使沒有地址，只要有店名就顯示按鈕 */}
                               {(currentMenu.restaurant?.name || currentMenu.restaurant?.address) && (
                                 <a 
                                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([currentMenu.restaurant.name, currentMenu.restaurant.address].filter(Boolean).join(" "))}`} 
@@ -846,7 +834,6 @@ export default function App() {
                    )}
                 </div>
 
-																												 
                 <div className="bg-white rounded-t-2xl border-b border-gray-100 p-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -868,7 +855,6 @@ export default function App() {
 
         {/* 滾動區域 */}
         <div className="flex-1 overflow-y-auto px-4 pb-6 pt-0 bg-gray-50">
-		  
           {activeTab === 'menu' && (
             <div className="space-y-6 animate-fade-in">
               {/* 卡片下半部 (List Only) */}
