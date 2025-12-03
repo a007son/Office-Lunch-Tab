@@ -564,6 +564,8 @@ export default function App() {
   const handleOrderAction = async () => {
     const { type, data } = modalConfig;
     
+    console.log(`[DEBUG] handleOrderAction triggered. Type: ${type}, Data:`, data); // DEBUG LOG
+    
     try {
       if (type === 'DELETE_SINGLE_ITEM') {
         // [修正邏輯] 確保 data 包含 id, price, userName
@@ -573,14 +575,32 @@ export default function App() {
         }
 
         await deleteDoc(doc(db, DATA_PATH, ORDERS_COLLECTION, data.id));
+        console.log(`[DEBUG] Successfully deleted order ID: ${data.id}`); // DEBUG LOG
+        
         await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.userName), { 
           balance: increment(-data.price) 
         });
+        console.log(`[DEBUG] Successfully decremented balance for user: ${data.userName} by ${data.price}`); // DEBUG LOG
+
         closeModal(); 
       } 
       else if (type === 'DELETE_ALL_ORDERS') {
         const batch = writeBatch(db);
+        
+        // [修正邏輯] 確保 data.userName 有值，否則無法過濾 todayOrders
+        if (!data || !data.userName) {
+            console.error("整筆刪除資料不完整: 缺少 userName", data);
+            return;
+        }
+
         const userOrders = todayOrders.filter(o => o.userName === data.userName);
+        
+        if (userOrders.length === 0) {
+            console.warn(`[DEBUG] No orders found for user: ${data.userName}. Skipping batch commit.`); // DEBUG LOG
+            closeModal();
+            return;
+        }
+
         let totalRefund = 0;
 
         userOrders.forEach(order => {
@@ -593,10 +613,12 @@ export default function App() {
         batch.update(userRef, { balance: increment(-totalRefund) });
 
         await batch.commit();
+        console.log(`[DEBUG] Successfully deleted ${userOrders.length} orders and refunded $${totalRefund} for user: ${data.userName}`); // DEBUG LOG
+
         closeModal();
       }
     } catch (e) {
-      console.error("刪除失敗", e);
+      console.error(`[ERROR] 刪除操作失敗 (${type}):`, e); // DEBUG LOG
       if (window.confirm("刪除失敗，請稍後再試")) {
         console.log("刪除失敗，請稍後再試");
       }
@@ -623,7 +645,7 @@ export default function App() {
       await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.targetUser), { balance: increment(-data.amount) });
       closeModal();
     } else if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS' || type === 'CONFIRM_DELETE_SINGLE') {
-      // [修正] 確保 CONFIRM_DELETE_SINGLE 委派給 handleOrderAction
+      // 確保 CONFIRM_DELETE_SINGLE 委派給 handleOrderAction, DELETE_SINGLE_ITEM/DELETE_ALL_ORDERS 也是最終執行步驟
       handleOrderAction();
     }
   };
