@@ -650,16 +650,16 @@ export default function App() {
       await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.targetUser), { balance: increment(-data.amount) });
       closeModal();
     } else if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS' || type === 'CONFIRM_DELETE_SINGLE') {
-      // [R2. 移除刪除邏輯] 刪除操作的最終確認現在由按鈕直接呼叫 handleOrderAction('FINAL_TYPE') 處理
-      // 這裡只保留原有的非刪除邏輯，或等待按鈕處的修正。
-      // 由於這段邏輯原本就是錯誤的，且所有刪除動作都透過按鈕觸發最終的 action，
-      // 所以這裡可以安全地移除，讓按鈕直接呼叫 handleOrderAction('FINAL_TYPE')。
-      // 如果需要執行，應該在按鈕處處理。
-      // 為了不影響其他可能依賴這個舊邏輯的流程（例如可能還有未修復的刪除邏輯依賴它），
-      // 我們讓它使用新的 handleOrderAction 結構，但僅在不是 CONFIRM_DELETE_SINGLE 時呼叫。
-      if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS') {
-          handleOrderAction(); // 呼叫時不傳遞 explicitType，仍使用 modalConfig.type (但建議未來將此流程完全重構成直接呼叫)
-      }
+      // 確保 CONFIRM_DELETE_SINGLE 委派給 handleOrderAction, DELETE_SINGLE_ITEM/DELETE_ALL_ORDERS 也是最終執行步驟
+										 
+														
+																									 
+														 
+																																										
+																											   
+																		  
+      handleOrderAction();
+	   
     }
   };
 
