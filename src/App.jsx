@@ -26,7 +26,7 @@ import {
   Utensils, DollarSign, User, Users, Trash2, CheckCircle, LogOut, 
   ChefHat, Search, Sparkles, Camera, Loader2, X, AlertCircle, Lock, 
   MapPin, Phone, MessageSquare, Minus, Plus, Wifi, Calendar, Clock,
-  CheckSquare, Square, Settings
+  CheckSquare, Square, Settings, Pencil // [新增] Pencil 圖示
 } from 'lucide-react';
 
 // --- 1. CONFIGURATION ---
@@ -157,7 +157,7 @@ const analyzeImage = async (base64Image) => {
           body: JSON.stringify({
             contents: [{
               parts: [
-                { text: "Analyze this menu image. 1. Extract the Restaurant Name, Phone Number, and Address. 2. Extract all food items and their prices. Return a JSON object with this exact structure: { \"restaurant\": { \"name\": \"string\", \"phone\": \"string\", \"address\": \"string\" }, \"items\": [{ \"name\": \"string\", \"price\": 123 }] }. If address or phone is missing, use empty string. Do not use markdown code blocks." },
+                { text: "Analyze this menu image. 1. Extract the Restaurant Name, Phone Number, and Address. 2. Extract all food items and their prices. Critically, ignore spaces in item names that appear to be simple layout formatting, especially for Mandarin text. Treat words as cohesive units (e.g., '紅 燒 牛肉 麵' must be '紅燒牛肉麵'). Return a JSON object with this exact structure: { \"restaurant\": { \"name\": \"string\", \"phone\": \"string\", \"address\": \"string\" }, \"items\": [{ \"name\": \"string\", \"price\": 123 }] }. If address or phone is missing, use empty string. Do not use markdown code blocks. Just pure JSON string." },
                 { inlineData: { mimeType: "image/jpeg", data: base64Image } }
               ]
             }]
@@ -233,7 +233,7 @@ const Login = ({ onLogin, isConnected }) => {
   
   const clearHistory = (e) => {
     e.stopPropagation();
-    // [修正] 使用自定義彈窗或 console.log 取代 confirm
+    // [修正] 使用 window.confirm 取代 confirm
     if (window.confirm('確定要清除本機的登入紀錄嗎？')) { 
       localStorage.removeItem('lunch_user_history');
       setHistoryUsers([]);
@@ -326,7 +326,7 @@ const Login = ({ onLogin, isConnected }) => {
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Unknown Date';
   const date = new Date(timestamp.seconds * 1000);
-  // [修改] 移除年份，只顯示 月/日 (週X)
+  // 移除年份，只顯示 月/日 (週X)
   return date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', weekday: 'short' });
 };
 
@@ -373,6 +373,10 @@ export default function App() {
   const [orderQuantity, setOrderQuantity] = useState(1);
   const [orderNote, setOrderNote] = useState('');
   const [isNoteComposing, setIsNoteComposing] = useState(false);
+  
+  // [新增] 編輯狀態
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editingKey, setEditingKey] = useState(null);
 
   // Effects
   useEffect(() => {
@@ -497,6 +501,9 @@ export default function App() {
   const groupedHistory = useMemo(() => {
     const groups = {};
     myHistory.forEach(order => {
+      // 確保 order.createdAt 存在且是 Timestamp
+      if (!order.createdAt || !order.createdAt.seconds) return;
+
       const date = new Date(order.createdAt.seconds * 1000);
       
       const monthDayStr = date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }); // 11/29
@@ -519,7 +526,15 @@ export default function App() {
       groups[dateKey].orders.push(order);
       groups[dateKey].total += (order.price || 0);
     });
-    return Object.values(groups).sort((a, b) => 0); 
+    // [優化] 根據訂單時間戳記排序，確保最新的紀錄在最上面
+    const sortedGroups = Object.values(groups).sort((a, b) => {
+      // 依據訂單組內最新一筆的時間戳記來排序 (降冪)
+      const dateA = a.orders[0]?.createdAt?.seconds || 0;
+      const dateB = b.orders[0]?.createdAt?.seconds || 0;
+      return dateB - dateA;
+    });
+
+    return sortedGroups;
   }, [myHistory]);
 
   const filteredItems = (currentMenu.items || []).filter(item => {
@@ -576,7 +591,6 @@ export default function App() {
       }
     } catch (e) {
       console.error("刪除失敗", e);
-      // [修正] 使用自定義彈窗或 console.log 取代 alert
       if (window.confirm("刪除失敗，請稍後再試")) {
         console.log("刪除失敗，請稍後再試");
       }
@@ -696,9 +710,8 @@ export default function App() {
       }, { merge: true });
 
     } catch (err) { 
-      // [修正] 使用自定義彈窗或 console.log 取代 alert
       if (window.confirm("上傳失敗: " + err.message)) {
-        console.error("上傳失敗: " + err.message);
+        console.error("上傳失敗: " + err.message); 
       }
       console.error(err);
     } finally { 
@@ -712,6 +725,7 @@ export default function App() {
     setNewItemName(''); setNewItemPrice('');
   };
   const removeMenuItem = async (itemId) => {
+    if (!window.confirm("確定要刪除此品項嗎?")) return;
     const updatedItems = currentMenu.items.filter(i => i.id !== itemId);
     await updateDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), { items: updatedItems });
   };
@@ -723,8 +737,130 @@ export default function App() {
     await updateDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), { orderDeadline: timeStr });
   };
 
+  // [新增] 菜單品項即時編輯處理函數
+  const handleUpdateMenuItem = async (itemId, key, value) => {
+    const updatedItems = currentMenu.items.map(item => {
+      if (item.id === itemId) {
+        // 確保價格是數字，名稱是字串
+        return { ...item, [key]: key === 'price' ? parseInt(value) || 0 : value };
+      }
+      return item;
+    });
+    setEditingItemId(null); // 關閉編輯狀態
+    setEditingKey(null);
+    await updateDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), { items: updatedItems });
+  };
+
   if (!userName) return <Login onLogin={handleLogin} isConnected={!!user} />;
   if (!firebaseConfig.apiKey) return <div className="p-10 text-center">請先設定 .env</div>;
+
+  // --- Helper Component: Editable Menu Item (內部組件，避免單檔限制) ---
+  const EditableMenuItem = ({ item, isAdminMode, handleUpdate, handleRemove, handlePlaceOrder, isOrderingClosed }) => {
+    const isEditing = editingItemId === item.id;
+    const isNameEditing = isEditing && editingKey === 'name';
+    const isPriceEditing = isEditing && editingKey === 'price';
+    
+    // 處理輸入欄位的 value
+    const [tempValue, setTempValue] = useState(item.name);
+
+    useEffect(() => {
+      if (isEditing) {
+        setTempValue(editingKey === 'name' ? item.name : item.price);
+      }
+    }, [isEditing, item.name, item.price, editingKey]);
+
+    const handleStartEdit = (key) => {
+      if (isAdminMode) {
+        setEditingItemId(item.id);
+        setEditingKey(key);
+      }
+    };
+
+    const handleStopEdit = (key, e) => {
+      if (key === 'name') {
+        handleUpdate(item.id, key, tempValue.trim() || item.name); // 避免空值
+      } else {
+        handleUpdate(item.id, key, tempValue);
+      }
+    };
+
+    const handleKeyDown = (e, key) => {
+      if (e.key === 'Enter') {
+        e.target.blur(); // 觸發 onBlur 結束編輯
+      } else if (e.key === 'Escape') {
+        setEditingItemId(null);
+        setEditingKey(null);
+      }
+    };
+
+    return (
+      <div className={`p-4 flex justify-between items-center transition group ${isOrderingClosed ? 'opacity-50 grayscale' : 'hover:bg-orange-50'}`}>
+        <div className="flex-1 min-w-0">
+          {/* 品項名稱 */}
+          {isNameEditing ? (
+            <input
+              type="text"
+              autoFocus
+              value={tempValue}
+              onChange={(e) => setTempValue(e.target.value)}
+              onBlur={(e) => handleStopEdit('name', e)}
+              onKeyDown={(e) => handleKeyDown(e, 'name')}
+              className="font-bold text-gray-800 w-full min-w-0 px-2 py-1 border border-orange-400 rounded-lg outline-none ring-2 ring-orange-100"
+            />
+          ) : (
+            <div 
+              className={`font-bold text-gray-800 flex items-center gap-2 cursor-pointer ${isAdminMode ? 'hover:text-orange-600' : ''}`}
+              onClick={() => handleStartEdit('name')}
+            >
+              {item.name}
+              {isAdminMode && <Pencil className="w-3 h-3 text-gray-300 group-hover:text-orange-400 transition" />}
+              {searchTerm && <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded">符合</span>}
+            </div>
+          )}
+
+          {/* 品項價格 */}
+          {isPriceEditing ? (
+            <input
+              type="number"
+              autoFocus
+              value={tempValue}
+              onChange={(e) => setTempValue(e.target.value)}
+              onBlur={(e) => handleStopEdit('price', e)}
+              onKeyDown={(e) => handleKeyDown(e, 'price')}
+              className="text-orange-600 font-semibold w-20 px-2 py-1 border border-orange-400 rounded-lg outline-none ring-2 ring-orange-100 mt-1"
+            />
+          ) : (
+            <div 
+              className={`text-orange-600 font-semibold flex items-center gap-1 cursor-pointer ${isAdminMode ? 'hover:text-red-600' : ''}`}
+              onClick={() => handleStartEdit('price')}
+            >
+              ${item.price}
+              {isAdminMode && <Pencil className="w-3 h-3 text-gray-300 group-hover:text-orange-400 transition" />}
+            </div>
+          )}
+        </div>
+
+        {/* 操作按鈕 */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isAdminMode ? (
+            <button onClick={() => handleRemove(item.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition">
+              <Trash2 className="w-5 h-5" />
+            </button>
+          ) : (
+            <button 
+              onClick={() => handlePlaceOrder(item)} 
+              disabled={isOrderingClosed} 
+              className={`px-4 py-1.5 rounded-full text-sm font-bold transition shadow-sm active:scale-95 
+                ${isOrderingClosed ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border border-orange-200 text-orange-600 hover:bg-orange-600 hover:text-white'}`}
+            >
+              {isOrderingClosed ? '已截止' : '+ 點餐'}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+  // --- End of Helper Component ---
 
   return (
     <div className="bg-gray-50 h-screen flex flex-col text-gray-800 font-sans overflow-hidden">
@@ -810,80 +946,181 @@ export default function App() {
 
             {activeTab === 'menu' && (
               <div className="px-4 pt-2">
-                {isAdminMode && (
-                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-4 shadow-sm mb-4">
-                    <h3 className="text-sm font-bold text-orange-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 管理員設置</h3>
-                    <div className="space-y-2">
-                      <input className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-orange-200 outline-none" placeholder="餐廳名稱" value={currentMenu.restaurant?.name} onChange={e => updateRestaurantInfo('name', e.target.value)} />
-                      <div className="flex gap-2"><input className="flex-1 p-2 border rounded text-sm focus:ring-2 focus:ring-orange-200 outline-none" placeholder="電話" value={currentMenu.restaurant?.phone} onChange={e => updateRestaurantInfo('phone', e.target.value)} /><input className="flex-1 p-2 border rounded text-sm focus:ring-2 focus:ring-orange-200 outline-none" placeholder="地址" value={currentMenu.restaurant?.address} onChange={e => updateRestaurantInfo('address', e.target.value)} /></div>
-                      <div className="flex items-center gap-2 p-2 bg-white border rounded"><Clock className="w-4 h-4 text-gray-500" /><span className="text-xs text-gray-500">收單時間：</span><input type="time" className="flex-1 text-sm outline-none" value={currentMenu.orderDeadline} onChange={e => updateDeadline(e.target.value)} /></div>
-                    </div>
-                    <div className="flex items-center gap-4"><input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} /><button onClick={() => fileInputRef.current.click()} disabled={isAnalyzing} className="flex-1 bg-gradient-to-r from-orange-500 to-pink-500 text-white py-2.5 rounded-lg text-sm font-bold hover:shadow-md transition flex justify-center items-center gap-2">{isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Camera className="w-4 h-4" />}{isAnalyzing ? 'AI 正在讀取菜單...' : '拍照/上傳菜單 (AI 自動建立)'}</button></div>
-                    <div className="pt-2 border-t border-orange-200"><div className="flex gap-2"><input placeholder="品項" className="flex-2 p-2 text-sm border rounded w-full" value={newItemName} onChange={e => setNewItemName(e.target.value)} /><input placeholder="$" type="number" className="flex-1 p-2 text-sm border rounded w-20" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} /><button onClick={addMenuItem} className="bg-gray-800 text-white px-3 rounded text-sm">+</button></div></div>
-                  </div>
-                )}
-
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
-                   <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
-                      {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
-                      <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
-                        <div className="flex flex-col justify-end h-full">
-                          <h2 className="font-bold text-2xl leading-tight mb-2">{currentMenu.restaurant?.name || '今日餐廳'}</h2>
-                          <div className="flex flex-col gap-1 text-sm text-gray-200">
-                            {currentMenu.restaurant?.phone && (
-                              <div className="flex items-center gap-2">
-                                <Phone className="w-3.5 h-3.5" /> 
-                                {formatPhoneNumber(currentMenu.restaurant.phone)}
-                              </div>
-                            )}
-                            <div className="flex items-center justify-between gap-2 mt-1">
-                              {currentMenu.restaurant?.address ? (
-                                <div className="flex items-center gap-2 truncate">
-                                  <MapPin className="w-3.5 h-3.5 flex-none" /> 
-                                  <span className="truncate">{currentMenu.restaurant.address}</span>
+                {/* [修改] 管理員模式下的兩欄佈局 */}
+                {isAdminMode ? (
+                  <div className="grid md:grid-cols-3 gap-4 mb-4">
+                    
+                    {/* 左側欄 (Menu Cover & Items List) - 佔 2/3 寬度 */}
+                    <div className="md:col-span-2 space-y-4">
+                      {/* Menu Cover Block (保持原樣) */}
+                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                         <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
+                            {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
+                            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
+                              <div className="flex flex-col justify-end h-full">
+                                <h2 className="font-bold text-2xl leading-tight mb-2">{currentMenu.restaurant?.name || '今日餐廳'}</h2>
+                                <div className="flex flex-col gap-1 text-sm text-gray-200">
+                                  {currentMenu.restaurant?.phone && (
+                                    <div className="flex items-center gap-2">
+                                      <Phone className="w-3.5 h-3.5" /> 
+                                      {formatPhoneNumber(currentMenu.restaurant.phone)}
+                                    </div>
+                                  )}
+                                  <div className="flex items-center justify-between gap-2 mt-1">
+                                    {currentMenu.restaurant?.address ? (
+                                      <div className="flex items-center gap-2 truncate">
+                                        <MapPin className="w-3.5 h-3.5 flex-none" /> 
+                                        <span className="truncate">{currentMenu.restaurant.address}</span>
+                                      </div>
+                                    ) : (
+                                      <div></div>
+                                    )}
+                                    {(currentMenu.restaurant?.name || currentMenu.restaurant?.address) && (
+                                      <a 
+                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([currentMenu.restaurant.name, currentMenu.restaurant.address].filter(Boolean).join(" "))}`} 
+                                        target="_blank" 
+                                        rel="noreferrer" 
+                                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg whitespace-nowrap"
+                                      >
+                                        <MapPin className="w-3 h-3" /> 地圖
+                                      </a>
+                                    )}
+                                  </div>
                                 </div>
-                              ) : (
-                                <div></div>
-                              )}
-                              {(currentMenu.restaurant?.name || currentMenu.restaurant?.address) && (
-                                <a 
-                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([currentMenu.restaurant.name, currentMenu.restaurant.address].filter(Boolean).join(" "))}`} 
-                                  target="_blank" 
-                                  rel="noreferrer" 
-                                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg whitespace-nowrap"
-                                >
-                                  <MapPin className="w-3 h-3" /> 地圖
-                                </a>
-                              )}
+                              </div>
                             </div>
+                         </div>
+                         
+                         {currentMenu.orderDeadline && (
+                          <div className={`px-4 py-2 flex justify-between items-center ${isOrderingClosed ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                            <div className="flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4" />{isOrderingClosed ? '今日已收單' : `收單時間：${currentMenu.orderDeadline}`}</div>
+                            {isOrderingClosed && <span className="text-xs bg-white/50 px-2 py-0.5 rounded">Closed</span>}
+                          </div>
+                         )}
+                      </div>
+                      
+                      {/* Search Bar Block (保持原樣) */}
+                      <div className="bg-white rounded-xl border-b border-gray-100 p-4">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                          <input 
+                            type="text" 
+                            placeholder="搜尋..." 
+                            className="w-full pl-9 pr-9 py-2.5 bg-gray-100 border-transparent focus:bg-white focus:ring-2 focus:ring-orange-500 rounded-lg text-sm transition outline-none" 
+                            value={searchTerm} 
+                            onChange={(e) => setSearchTerm(e.target.value)} 
+                            onCompositionStart={() => setIsSearchComposing(true)} 
+                            onCompositionEnd={(e) => { setIsSearchComposing(false); setSearchTerm(e.target.value); }} 
+                          />
+                          {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 右側欄 (Admin Settings) - 佔 1/3 寬度 */}
+                    <div className="md:col-span-1">
+                      <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-4 shadow-sm mb-4">
+                        <h3 className="text-sm font-bold text-orange-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 管理員設置</h3>
+                        {/* 餐廳資訊編輯區塊 */}
+                        <div className="space-y-2">
+                          <h4 className="text-xs text-gray-500 font-bold mt-2">餐廳資訊</h4>
+                          <input className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-orange-200 outline-none" placeholder="餐廳名稱" value={currentMenu.restaurant?.name} onChange={e => updateRestaurantInfo('name', e.target.value)} />
+                          <div className="flex gap-2">
+                            <input className="flex-1 p-2 border rounded text-sm focus:ring-2 focus:ring-orange-200 outline-none" placeholder="電話" value={currentMenu.restaurant?.phone} onChange={e => updateRestaurantInfo('phone', e.target.value)} />
+                            <input className="flex-1 p-2 border rounded text-sm focus:ring-2 focus:ring-orange-200 outline-none" placeholder="地址" value={currentMenu.restaurant?.address} onChange={e => updateRestaurantInfo('address', e.target.value)} />
+                          </div>
+                          <div className="flex items-center gap-2 p-2 bg-white border rounded">
+                            <Clock className="w-4 h-4 text-gray-500" />
+                            <span className="text-xs text-gray-500">收單時間：</span>
+                            <input type="time" className="flex-1 text-sm outline-none" value={currentMenu.orderDeadline} onChange={e => updateDeadline(e.target.value)} />
+                          </div>
+                        </div>
+                        {/* AI 辨識區塊 */}
+                        <div className="flex items-center gap-4 pt-2 border-t border-orange-200">
+                          <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
+                          <button onClick={() => fileInputRef.current.click()} disabled={isAnalyzing} className="flex-1 bg-gradient-to-r from-orange-500 to-pink-500 text-white py-2.5 rounded-lg text-sm font-bold hover:shadow-md transition flex justify-center items-center gap-2">
+                            {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Camera className="w-4 h-4" />}
+                            {isAnalyzing ? 'AI 正在讀取菜單...' : '拍照/上傳菜單 (AI 自動建立)'}
+                          </button>
+                        </div>
+                        {/* 手動新增品項區塊 */}
+                        <div className="pt-2 border-t border-orange-200">
+                          <h4 className="text-xs text-gray-500 font-bold mb-1">手動新增品項</h4>
+                          <div className="flex gap-2">
+                            <input placeholder="品項名稱" className="flex-2 p-2 text-sm border rounded w-full" value={newItemName} onChange={e => setNewItemName(e.target.value)} />
+                            <input placeholder="$" type="number" className="flex-1 p-2 text-sm border rounded w-20" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} />
+                            <button onClick={addMenuItem} className="bg-gray-800 text-white px-3 rounded text-sm">+</button>
                           </div>
                         </div>
                       </div>
-                   </div>
-                   
-                   {currentMenu.orderDeadline && (
-                    <div className={`px-4 py-2 flex justify-between items-center ${isOrderingClosed ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                      <div className="flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4" />{isOrderingClosed ? '今日已收單' : `收單時間：${currentMenu.orderDeadline}`}</div>
-                      {isOrderingClosed && <span className="text-xs bg-white/50 px-2 py-0.5 rounded">Closed</span>}
                     </div>
-                   )}
-                </div>
-
-                <div className="bg-white rounded-t-2xl border-b border-gray-100 p-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input 
-                      type="text" 
-                      placeholder="搜尋..." 
-                      className="w-full pl-9 pr-9 py-2.5 bg-gray-100 border-transparent focus:bg-white focus:ring-2 focus:ring-orange-500 rounded-lg text-sm transition outline-none" 
-                      value={searchTerm} 
-                      onChange={(e) => setSearchTerm(e.target.value)} 
-                      onCompositionStart={() => setIsSearchComposing(true)} 
-                      onCompositionEnd={(e) => { setIsSearchComposing(false); setSearchTerm(e.target.value); }} 
-                    />
-                    {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>}
                   </div>
-                </div>
+                ) : (
+                  // 非管理員或行動裝置時的單欄佈局 (還原原先的 Menu Cover + Search)
+                  <>
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+                       <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
+                          {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
+                          <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
+                            <div className="flex flex-col justify-end h-full">
+                              <h2 className="font-bold text-2xl leading-tight mb-2">{currentMenu.restaurant?.name || '今日餐廳'}</h2>
+                              <div className="flex flex-col gap-1 text-sm text-gray-200">
+                                {currentMenu.restaurant?.phone && (
+                                  <div className="flex items-center gap-2">
+                                    <Phone className="w-3.5 h-3.5" /> 
+                                    {formatPhoneNumber(currentMenu.restaurant.phone)}
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-between gap-2 mt-1">
+                                  {currentMenu.restaurant?.address ? (
+                                    <div className="flex items-center gap-2 truncate">
+                                      <MapPin className="w-3.5 h-3.5 flex-none" /> 
+                                      <span className="truncate">{currentMenu.restaurant.address}</span>
+                                    </div>
+                                  ) : (
+                                    <div></div>
+                                  )}
+                                  {(currentMenu.restaurant?.name || currentMenu.restaurant?.address) && (
+                                    <a 
+                                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([currentMenu.restaurant.name, currentMenu.restaurant.address].filter(Boolean).join(" "))}`} 
+                                      target="_blank" 
+                                      rel="noreferrer" 
+                                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg whitespace-nowrap"
+                                    >
+                                      <MapPin className="w-3 h-3" /> 地圖
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {currentMenu.orderDeadline && (
+                           <div className={`px-4 py-2 flex justify-between items-center ${isOrderingClosed ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                             <div className="flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4" />{isOrderingClosed ? '今日已收單' : `收單時間：${currentMenu.orderDeadline}`}</div>
+                             {isOrderingClosed && <span className="text-xs bg-white/50 px-2 py-0.5 rounded">Closed</span>}
+                           </div>
+                          )}
+                       </div>
+                    </div>
+                    
+                    <div className="bg-white rounded-t-2xl border-b border-gray-100 p-4">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <input 
+                          type="text" 
+                          placeholder="搜尋..." 
+                          className="w-full pl-9 pr-9 py-2.5 bg-gray-100 border-transparent focus:bg-white focus:ring-2 focus:ring-orange-500 rounded-lg text-sm transition outline-none" 
+                          value={searchTerm} 
+                          onChange={(e) => setSearchTerm(e.target.value)} 
+                          onCompositionStart={() => setIsSearchComposing(true)} 
+                          onCompositionEnd={(e) => { setIsSearchComposing(false); setSearchTerm(e.target.value); }} 
+                        />
+                        {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
         </div>
@@ -892,7 +1129,23 @@ export default function App() {
           {activeTab === 'menu' && (
             <div className="space-y-6 animate-fade-in">
               <div className="bg-white rounded-b-2xl shadow-sm overflow-hidden min-h-[200px]">
-                <div className="divide-y divide-gray-50">{filteredItems.length > 0 ? filteredItems.map(item => (<div key={item.id} className={`p-4 flex justify-between items-center transition group ${isOrderingClosed ? 'opacity-50 grayscale' : 'hover:bg-orange-50'}`}><div><div className="font-bold text-gray-800 flex items-center gap-2">{item.name} {searchTerm && <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded">符合</span>}</div><div className="text-orange-600 font-semibold">${item.price}</div></div><div className="flex items-center gap-2">{isAdminMode ? (<button onClick={() => removeMenuItem(item.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition"><Trash2 className="w-5 h-5" /></button>) : (<button onClick={() => handlePlaceOrder(item)} disabled={isOrderingClosed} className={`px-4 py-1.5 rounded-full text-sm font-bold transition shadow-sm active:scale-95 ${isOrderingClosed ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border border-orange-200 text-orange-600 hover:bg-orange-600 hover:text-white'}`}>{isOrderingClosed ? '已截止' : '+ 點餐'}</button>)}</div></div>)) : !searchTerm && <div className="p-8 text-center text-gray-400">{isAdminMode ? '請上傳菜單或新增品項' : '今日尚未建立菜單'}</div>}</div>
+                <div className="divide-y divide-gray-50">
+                  {filteredItems.length > 0 ? filteredItems.map(item => (
+                    <EditableMenuItem
+                      key={item.id}
+                      item={item}
+                      isAdminMode={isAdminMode}
+                      handleUpdate={handleUpdateMenuItem}
+                      handleRemove={removeMenuItem}
+                      handlePlaceOrder={handlePlaceOrder}
+                      isOrderingClosed={isOrderingClosed}
+                    />
+                  )) : !searchTerm && (
+                    <div className="p-8 text-center text-gray-400">
+                      {isAdminMode ? '請上傳菜單或新增品項' : '今日尚未建立菜單'}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
