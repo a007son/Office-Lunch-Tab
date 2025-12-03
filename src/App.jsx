@@ -566,6 +566,12 @@ export default function App() {
     
     try {
       if (type === 'DELETE_SINGLE_ITEM') {
+        // [修正邏輯] 確保 data 包含 id, price, userName
+        if (!data || !data.id || typeof data.price === 'undefined' || !data.userName) {
+            console.error("單筆刪除資料不完整:", data);
+            return;
+        }
+
         await deleteDoc(doc(db, DATA_PATH, ORDERS_COLLECTION, data.id));
         await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.userName), { 
           balance: increment(-data.price) 
@@ -616,7 +622,8 @@ export default function App() {
     } else if (type === 'SETTLE_DEBT') {
       await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.targetUser), { balance: increment(-data.amount) });
       closeModal();
-    } else if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS') {
+    } else if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS' || type === 'CONFIRM_DELETE_SINGLE') {
+      // [修正] 確保 CONFIRM_DELETE_SINGLE 委派給 handleOrderAction
       handleOrderAction();
     }
   };
@@ -876,6 +883,13 @@ export default function App() {
       {/* [修復] 移除重複定義，只保留這個 SETTLE_DEBT Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUserName || modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
 
+      {/* [新增] 單筆訂單刪除確認 Modal */}
+      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_SINGLE'} onClose={closeModal} title="刪除單筆訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { setModalConfig({ ...modalConfig, type: 'DELETE_SINGLE_ITEM' }); confirmModal(); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}>
+        <p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的這筆訂單嗎？</p>
+        <p className="text-lg font-bold text-gray-800 mt-2">{modalConfig.data?.itemName} x{modalConfig.data?.quantity}</p>
+        <p className="text-sm text-gray-500 mt-1">金額 ${modalConfig.data?.price} 將會從帳本中扣除。</p>
+      </Modal>
+
       {/* [修復] 確保 data.items 存在才進行 map，防止 Cannot read properties of undefined */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'MANAGE_ORDER'} onClose={closeModal} title={`管理 ${modalConfig.data?.userName} 的訂單`}>
         <div className="space-y-4">
@@ -885,10 +899,20 @@ export default function App() {
                 <div className="font-bold text-gray-800">{item.itemName} {item.quantity > 1 && <span className="text-orange-600">x{item.quantity}</span>}</div>
                 <div className="text-xs text-gray-500">${item.price} {item.note && `(${item.note})`}</div>
               </div>
+              {/* [修正] 點擊後，設定為 CONFIRM_DELETE_SINGLE 類型，並傳遞訂單所需的完整資訊 */}
               <button 
                 onClick={() => {
-                  setModalConfig({ type: 'DELETE_SINGLE_ITEM', data: { ...item, allItems: modalConfig.data.items } });
-                  confirmModal();
+                  setModalConfig({ 
+                    isOpen: true,
+                    type: 'CONFIRM_DELETE_SINGLE', 
+                    data: { 
+                      id: item.id, 
+                      price: item.price, 
+                      userName: modalConfig.data.userName, 
+                      itemName: item.itemName, 
+                      quantity: item.quantity
+                    } 
+                  });
                 }} 
                 className="p-2 text-red-500 hover:bg-red-100 rounded-full transition"
               >
