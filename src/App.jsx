@@ -26,7 +26,7 @@ import {
   Utensils, DollarSign, User, Users, Trash2, CheckCircle, LogOut, 
   ChefHat, Search, Sparkles, Camera, Loader2, X, AlertCircle, Lock, 
   MapPin, Phone, MessageSquare, Minus, Plus, Wifi, Calendar, Clock,
-  CheckSquare, Square, Settings, History, ChevronRight
+  CheckSquare, Square, Settings
 } from 'lucide-react';
 
 // --- 1. CONFIGURATION ---
@@ -233,7 +233,8 @@ const Login = ({ onLogin, isConnected }) => {
   
   const clearHistory = (e) => {
     e.stopPropagation();
-    if(confirm('確定要清除本機的登入紀錄嗎？')) {
+    // [修正] 使用自定義彈窗或 console.log 取代 confirm
+    if (window.confirm('確定要清除本機的登入紀錄嗎？')) { 
       localStorage.removeItem('lunch_user_history');
       setHistoryUsers([]);
     }
@@ -492,15 +493,33 @@ export default function App() {
     });
   }, [todayOrders, userName]);
 
+  // [修改] 每日消費明細：新增 month, day, weekday 欄位以支援 Style D
   const groupedHistory = useMemo(() => {
     const groups = {};
     myHistory.forEach(order => {
-      const dateStr = formatDate(order.createdAt);
-      if (!groups[dateStr]) groups[dateStr] = { orders: [], total: 0, date: dateStr };
-      groups[dateStr].orders.push(order);
-      groups[dateStr].total += (order.price || 0);
+      const date = new Date(order.createdAt.seconds * 1000);
+      
+      const monthDayStr = date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }); // 11/29
+      const weekdayStr = date.toLocaleDateString('zh-TW', { weekday: 'short' }); // 週五
+      const monthStr = date.toLocaleDateString('zh-TW', { month: 'numeric' }) + '月'; // 11月
+      const dayStr = date.toLocaleDateString('zh-TW', { day: 'numeric' }); // 29
+
+      const dateKey = monthDayStr + ' ' + weekdayStr;
+
+      if (!groups[dateKey]) {
+        groups[dateKey] = { 
+          orders: [], 
+          total: 0, 
+          date: dateKey, // 11/29 週五
+          month: monthStr, // 11月
+          day: dayStr, // 29
+          weekday: weekdayStr // 週五
+        };
+      }
+      groups[dateKey].orders.push(order);
+      groups[dateKey].total += (order.price || 0);
     });
-    return Object.values(groups).sort((a, b) => 0); // 保持原始排序 (最新的在最上面)
+    return Object.values(groups).sort((a, b) => 0); 
   }, [myHistory]);
 
   const filteredItems = (currentMenu.items || []).filter(item => {
@@ -557,7 +576,10 @@ export default function App() {
       }
     } catch (e) {
       console.error("刪除失敗", e);
-      alert("刪除失敗，請稍後再試");
+      // [修正] 使用自定義彈窗或 console.log 取代 alert
+      if (window.confirm("刪除失敗，請稍後再試")) {
+        console.log("刪除失敗，請稍後再試");
+      }
     }
   };
 
@@ -674,7 +696,10 @@ export default function App() {
       }, { merge: true });
 
     } catch (err) { 
-      alert("上傳失敗: " + err.message); 
+      // [修正] 使用自定義彈窗或 console.log 取代 alert
+      if (window.confirm("上傳失敗: " + err.message)) {
+        console.error("上傳失敗: " + err.message);
+      }
       console.error(err);
     } finally { 
       setIsAnalyzing(false); 
@@ -950,40 +975,33 @@ export default function App() {
                   )}
                 </div>
                 
-                {/* [修改] 每日消費明細：Timeline 樣式 */}
+                {/* [實作] 每日消費明細：採用 Style D (雜誌排版) */}
                 <div className="border-t pt-4">
                   <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">歷史紀錄</h4>
-                  <div className="space-y-0 relative">
-                    {/* 左側直線 */}
-                    {groupedHistory.length > 0 && <div className="absolute left-[3.5rem] top-2 bottom-2 w-0.5 bg-gray-100"></div>}
-                    
+                  <div className="space-y-6 pl-2">
                     {groupedHistory.length > 0 ? groupedHistory.map((group, idx) => (
-                      <div key={group.date} className="relative flex gap-4 pb-6 last:pb-0">
-                        {/* 左側日期 */}
-                        <div className="w-12 pt-1 flex flex-col items-center shrink-0">
-                          <span className="text-xs font-bold text-gray-500">{group.date.split(' ')[0]}</span>
-                          <span className="text-[10px] text-gray-400">{group.date.split(' ')[1]}</span>
+                        <div key={group.date} className="flex gap-4 items-start group">
+                            {/* 左側：大日期數字與月份 */}
+                            <div className="flex flex-col items-center pt-1 w-12 shrink-0">
+                                <span className="text-3xl font-black text-orange-200 leading-none group-hover:text-orange-400 transition">{group.day}</span>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase mt-1">{group.month}</span>
+                            </div>
+                            {/* 右側：內容區塊 */}
+                            <div className="flex-1 pt-1 border-b border-gray-200 pb-4 group-last:border-0">
+                                <div className="flex justify-between items-center mb-3">
+                                   <span className="text-[10px] font-bold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{group.weekday}</span>
+                                   <span className="font-bold text-gray-900 text-lg">${group.total}</span>
+                                </div>
+                                <div className="space-y-2 bg-white rounded-lg p-2 border border-transparent hover:border-gray-100 hover:shadow-sm transition">
+                                  {group.orders.map(h => (
+                                     <div key={h.id} className="text-sm text-gray-600 flex justify-between">
+                                       <span>{h.itemName} {h.quantity > 1 && `x${h.quantity}`}</span>
+                                       <span className="text-gray-400">${h.price}</span>
+                                     </div>
+                                  ))}
+                                </div>
+                            </div>
                         </div>
-                        
-                        {/* 中間圓點 */}
-                        <div className="absolute left-[3.5rem] -translate-x-1/2 mt-1.5 w-2.5 h-2.5 rounded-full bg-orange-200 border-2 border-white z-10"></div>
-                        
-                        {/* 右側內容 */}
-                        <div className="flex-1 bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition">
-                           <div className="flex justify-between items-baseline mb-2">
-                             <h5 className="text-xs font-bold text-gray-700">當日合計</h5>
-                             <span className="font-mono font-bold text-gray-900">${group.total}</span>
-                           </div>
-                           <div className="space-y-1">
-                             {group.orders.map(h => (
-                               <div key={h.id} className="flex justify-between text-sm text-gray-500">
-                                 <span>{h.itemName} {h.quantity > 1 && `x${h.quantity}`}</span>
-                                 <span className="text-gray-400">${h.price}</span>
-                               </div>
-                             ))}
-                           </div>
-                        </div>
-                      </div>
                     )) : (
                       <div className="text-gray-400 text-sm italic text-center py-4">尚無消費紀錄</div>
                     )}
