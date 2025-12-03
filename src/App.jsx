@@ -26,11 +26,12 @@ import {
   Utensils, DollarSign, User, Users, Trash2, CheckCircle, LogOut, 
   ChefHat, Search, Sparkles, Camera, Loader2, X, AlertCircle, Lock, 
   MapPin, Phone, MessageSquare, Minus, Plus, Wifi, Calendar, Clock,
-  CheckSquare, Square, Settings, Pencil, Menu
+  CheckSquare, Square, Settings, Pencil // [新增] Pencil 圖示
 } from 'lucide-react';
 
 // --- 1. CONFIGURATION ---
 
+// [部署設定] 讀取環境變數
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -40,6 +41,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+// [部署設定] 前端備用金鑰 (可選)
 const CLIENT_SIDE_GEMINI_KEY = ""; 
 
 // 初始化 Firebase
@@ -99,10 +101,12 @@ const formatPhoneNumber = (phoneNumber) => {
   if (!phoneNumber) return '';
   const cleaned = ('' + phoneNumber).replace(/\D/g, '');
   
+  // 手機 (10碼) -> 0912-345678
   if (cleaned.length === 10 && cleaned.startsWith('09')) {
     return `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
   }
 
+  // 市話 (9碼或10碼，含區碼)
   if (cleaned.startsWith('0') && cleaned.length >= 9) {
     if (['02', '04', '07'].includes(cleaned.slice(0, 2))) {
        return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
@@ -179,6 +183,7 @@ const analyzeImage = async (base64Image) => {
 const Modal = ({ isOpen, onClose, title, children, footer }) => {
   if (!isOpen) return null;
   return (
+    // [修正] Mobile: items-start + pt-24 (固定頂部距離), Desktop: items-center (垂直置中)
     <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 pt-24 md:pt-4 bg-black/40 backdrop-blur-sm transition-opacity">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 relative z-10 flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
@@ -200,103 +205,7 @@ const Modal = ({ isOpen, onClose, title, children, footer }) => {
   );
 };
 
-// Admin Drawer Component
-const AdminDrawer = ({ isOpen, onClose, toggleDrawer, currentMenu, updateRestaurantInfo, updateDeadline, handleImageUpload, isAnalyzing, fileInputRef, newItemName, setNewItemName, newItemPrice, setNewItemPrice, addMenuItem }) => {
-  return (
-    <>
-      {isOpen && (
-        <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity"
-          onClick={onClose}
-        ></div>
-      )}
-      
-      <div className={`fixed top-0 right-0 h-full z-50 flex transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-[20rem]'}`}>
-        
-        {/* Gear Trigger (Attached to Drawer) */}
-        <div className="relative h-full">
-           <button 
-              onClick={toggleDrawer}
-              className="absolute left-0 top-[110px] -translate-x-full bg-white border-l border-t border-b border-gray-200 shadow-[-4px_4px_10px_rgba(0,0,0,0.05)] p-3 rounded-l-xl hover:bg-orange-50 hover:pl-4 hover:pr-2 transition-all duration-300 group flex items-center justify-center"
-              title={isOpen ? "關閉設定" : "開啟設定"}
-            >
-              {isOpen ? (
-                 <X className="w-6 h-6 text-gray-500 group-hover:text-orange-500 transition-colors" />
-              ) : (
-                 <Settings className="w-6 h-6 text-gray-500 group-hover:text-orange-500 transition-colors group-hover:rotate-90 duration-500" />
-              )}
-            </button>
-        </div>
-
-        {/* Drawer Body */}
-        <div className="h-full w-80 bg-white shadow-2xl flex flex-col border-l border-gray-100">
-          <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-orange-50">
-            <h2 className="font-bold text-lg text-orange-900 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 管理員設定</h2>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* 1. 餐廳資訊 */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                <Utensils className="w-3 h-3" /> 餐廳資訊
-              </h4>
-              <div className="space-y-3">
-                <input className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-200 outline-none transition" placeholder="餐廳名稱" value={currentMenu.restaurant?.name || ''} onChange={e => updateRestaurantInfo('name', e.target.value)} />
-                <input className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none" placeholder="電話" value={currentMenu.restaurant?.phone || ''} onChange={e => updateRestaurantInfo('phone', e.target.value)} />
-                <input className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none" placeholder="地址" value={currentMenu.restaurant?.address || ''} onChange={e => updateRestaurantInfo('address', e.target.value)} />
-                <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <Clock className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-500">截止時間：</span>
-                  <input type="time" className="flex-1 bg-transparent text-sm outline-none text-right" value={currentMenu.orderDeadline || ''} onChange={e => updateDeadline(e.target.value)} />
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100"></div>
-
-            {/* 2. AI 上傳 */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                <Camera className="w-3 h-3" /> AI 智慧辨識
-              </h4>
-              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
-              <div 
-                onClick={() => !isAnalyzing && fileInputRef.current.click()}
-                className={`bg-orange-50 border-2 border-dashed border-orange-200 rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-orange-100 hover:border-orange-300 transition group ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {isAnalyzing ? (
-                  <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-2" />
-                ) : (
-                  <div className="bg-white p-3 rounded-full shadow-sm mb-2 group-hover:scale-110 transition">
-                    <Camera className="w-6 h-6 text-orange-500" />
-                  </div>
-                )}
-                <span className="text-sm font-bold text-orange-700">{isAnalyzing ? 'AI 分析中...' : '拍照或上傳菜單'}</span>
-                {!isAnalyzing && <span className="text-xs text-orange-500 mt-1">自動辨識品項與價格</span>}
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100"></div>
-
-            {/* 3. 手動新增 */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">手動新增品項</h4>
-              <div className="flex gap-2">
-                <input className="flex-1 p-3 border border-gray-300 rounded-lg text-sm outline-none focus:border-orange-500" placeholder="品項名稱" value={newItemName} onChange={e => setNewItemName(e.target.value)} />
-                <input type="number" className="w-20 p-3 border border-gray-300 rounded-lg text-sm outline-none focus:border-orange-500 text-center" placeholder="$" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} />
-              </div>
-              <button onClick={addMenuItem} className="w-full bg-gray-800 text-white py-3 rounded-lg font-bold hover:bg-gray-700 transition shadow-lg shadow-gray-200 flex justify-center items-center gap-2">
-                <Plus className="w-4 h-4" /> 確認新增
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-};
-
-// Login Component
+// [修改] Login 元件：現在只讀取 LocalStorage 的歷史紀錄
 const Login = ({ onLogin, isConnected }) => {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -304,6 +213,7 @@ const Login = ({ onLogin, isConnected }) => {
   const [historyUsers, setHistoryUsers] = useState([]);
   const [rememberMe, setRememberMe] = useState(true);
 
+  // [修改] 讀取本地歷史紀錄，而非 DB
   useEffect(() => {
     try {
       const history = JSON.parse(localStorage.getItem('lunch_user_history') || '[]');
@@ -323,6 +233,7 @@ const Login = ({ onLogin, isConnected }) => {
   
   const clearHistory = (e) => {
     e.stopPropagation();
+    // [修正] 使用 window.confirm 取代 confirm
     if (window.confirm('確定要清除本機的登入紀錄嗎？')) { 
       localStorage.removeItem('lunch_user_history');
       setHistoryUsers([]);
@@ -330,6 +241,7 @@ const Login = ({ onLogin, isConnected }) => {
   }
 
   return (
+    // 維持之前的修正：items-start + pt-20
     <div className="min-h-screen bg-orange-50 flex items-start md:items-center justify-center p-4 pt-20 md:pt-0 relative">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border-t-4 border-orange-500">
         <div className="flex justify-center mb-6">
@@ -414,6 +326,7 @@ const Login = ({ onLogin, isConnected }) => {
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Unknown Date';
   const date = new Date(timestamp.seconds * 1000);
+  // 移除年份，只顯示 月/日 (週X)
   return date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', weekday: 'short' });
 };
 
@@ -450,9 +363,6 @@ export default function App() {
   const [newItemPrice, setNewItemPrice] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const fileInputRef = useRef(null);
-  
-  // [新增] Drawer State
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // UI
   const [searchTerm, setSearchTerm] = useState('');
@@ -464,7 +374,7 @@ export default function App() {
   const [orderNote, setOrderNote] = useState('');
   const [isNoteComposing, setIsNoteComposing] = useState(false);
   
-  // Editing State
+  // [新增] 編輯狀態
   const [editingItemId, setEditingItemId] = useState(null);
   const [editingKey, setEditingKey] = useState(null);
 
@@ -587,35 +497,44 @@ export default function App() {
     });
   }, [todayOrders, userName]);
 
-  // [修改] 歷史紀錄：Style D (Magazine)
+  // [修改] 每日消費明細：新增 month, day, weekday 欄位以支援 Style D
   const groupedHistory = useMemo(() => {
     const groups = {};
     myHistory.forEach(order => {
+      // 確保 order.createdAt 存在且是 Timestamp
       if (!order.createdAt || !order.createdAt.seconds) return;
+
       const date = new Date(order.createdAt.seconds * 1000);
-      const monthDayStr = date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
-      const weekdayStr = date.toLocaleDateString('zh-TW', { weekday: 'short' });
-      const monthStr = date.toLocaleDateString('zh-TW', { month: 'numeric' }) + '月';
-      const dayStr = date.toLocaleDateString('zh-TW', { day: 'numeric' });
+      
+      const monthDayStr = date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }); // 11/29
+      const weekdayStr = date.toLocaleDateString('zh-TW', { weekday: 'short' }); // 週五
+      const monthStr = date.toLocaleDateString('zh-TW', { month: 'numeric' }) + '月'; // 11月
+      const dayStr = date.toLocaleDateString('zh-TW', { day: 'numeric' }); // 29
+
       const dateKey = monthDayStr + ' ' + weekdayStr;
+
       if (!groups[dateKey]) {
         groups[dateKey] = { 
           orders: [], 
           total: 0, 
-          date: dateKey,
-          month: monthStr,
-          day: dayStr,
-          weekday: weekdayStr
+          date: dateKey, // 11/29 週五
+          month: monthStr, // 11月
+          day: dayStr, // 29
+          weekday: weekdayStr // 週五
         };
       }
       groups[dateKey].orders.push(order);
       groups[dateKey].total += (order.price || 0);
     });
-    return Object.values(groups).sort((a, b) => {
+    // [優化] 根據訂單時間戳記排序，確保最新的紀錄在最上面
+    const sortedGroups = Object.values(groups).sort((a, b) => {
+      // 依據訂單組內最新一筆的時間戳記來排序 (降冪)
       const dateA = a.orders[0]?.createdAt?.seconds || 0;
       const dateB = b.orders[0]?.createdAt?.seconds || 0;
       return dateB - dateA;
     });
+
+    return sortedGroups;
   }, [myHistory]);
 
   const filteredItems = (currentMenu.items || []).filter(item => {
@@ -641,31 +560,54 @@ export default function App() {
     setAdminPin(''); setPinError(''); setOrderQuantity(1); setOrderNote('');
   };
 
+  // 處理訂單操作 (刪除單項 / 刪除整單)
+  // [R1. 讓 handleOrderAction 接收一個 explicitType 以規避 State 延遲問題]
   const handleOrderAction = async (explicitType) => {
+    // 優先使用明確傳入的類型，否則使用 State 中的類型 (但這個 fall back 在按鈕修正後應該不會被執行到)
     const type = explicitType || modalConfig.type;
     const data = modalConfig.data;
     
+    console.log(`[DEBUG] handleOrderAction triggered. Type: ${type}, Data:`, data); // DEBUG LOG
+    
     try {
       if (type === 'DELETE_SINGLE_ITEM') {
-        if (!data || !data.id || typeof data.price === 'undefined' || !data.userName) return;
+        // [修正邏輯] 確保 data 包含 id, price, userName
+        if (!data || !data.id || typeof data.price === 'undefined' || !data.userName) {
+            console.error("單筆刪除資料不完整:", data);
+            return;
+        }
 
         await deleteDoc(doc(db, DATA_PATH, ORDERS_COLLECTION, data.id));
+        console.log(`[DEBUG] Successfully deleted order ID: ${data.id}`); // DEBUG LOG
+        
         await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.userName), { 
           balance: increment(-data.price) 
         });
+        console.log(`[DEBUG] Successfully decremented balance for user: ${data.userName} by ${data.price}`); // DEBUG LOG
+
         closeModal(); 
       } 
       else if (type === 'DELETE_ALL_ORDERS') {
         const batch = writeBatch(db);
-        if (!data || !data.userName) return;
+        
+        // [修正邏輯] 確保 data.userName 有值，否則無法過濾 todayOrders
+        if (!data || !data.userName) {
+            console.error("整筆刪除資料不完整: 缺少 userName", data);
+            return;
+        }
 
+        // NOTE: 這裡使用 todayOrders state 是可接受的，因為它由 onSnapshot 維護，
+        // 但為了確保在極端狀況下仍能運作，我們讓它 fallback 到元件 state，並加入安全檢查。
         const userOrders = todayOrders.filter(o => o.userName === data.userName);
+        
         if (userOrders.length === 0) {
+            console.warn(`[DEBUG] No orders found for user: ${data.userName}. Skipping batch commit.`); // DEBUG LOG
             closeModal();
             return;
         }
 
         let totalRefund = 0;
+
         userOrders.forEach(order => {
           const orderRef = doc(db, DATA_PATH, ORDERS_COLLECTION, order.id);
           batch.delete(orderRef);
@@ -676,12 +618,14 @@ export default function App() {
         batch.update(userRef, { balance: increment(-totalRefund) });
 
         await batch.commit();
+        console.log(`[DEBUG] Successfully deleted ${userOrders.length} orders and refunded $${totalRefund} for user: ${data.userName}`); // DEBUG LOG
+
         closeModal();
       }
     } catch (e) {
-      console.error("刪除失敗", e);
+      console.error(`[ERROR] 刪除操作失敗 (${type}):`, e); // DEBUG LOG
       if (window.confirm("刪除失敗，請稍後再試")) {
-        console.log("刪除失敗");
+        console.log("刪除失敗，請稍後再試");
       }
     }
   };
@@ -705,8 +649,17 @@ export default function App() {
     } else if (type === 'SETTLE_DEBT') {
       await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.targetUser), { balance: increment(-data.amount) });
       closeModal();
-    } else if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS') {
+    } else if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS' || type === 'CONFIRM_DELETE_SINGLE') {
+      // 確保 CONFIRM_DELETE_SINGLE 委派給 handleOrderAction, DELETE_SINGLE_ITEM/DELETE_ALL_ORDERS 也是最終執行步驟
+										 
+														
+																									 
+														 
+																																										
+																											   
+																		  
       handleOrderAction();
+	   
     }
   };
 
@@ -726,12 +679,30 @@ export default function App() {
     });
   };
 
+  // [修復] 結帳收款：傳入 ID (作為 userRef key) 和 amount
   const handleSettleDebt = (targetUserId, amount, targetUserName) => {
-    setModalConfig({ isOpen: true, type: 'SETTLE_DEBT', data: { targetUser: targetUserId, amount, targetUserName } });
+    setModalConfig({ 
+      isOpen: true, 
+      type: 'SETTLE_DEBT', 
+      data: { targetUser: targetUserId, amount, targetUserName } // 傳入 name 供顯示
+    });
   };
 
+  // [修改] 登入處理：寫入本機歷史紀錄
   const handleLogin = (name, remember) => {
     setUserName(name);
+    
+    // 更新本機歷史紀錄 (存入不重複的最近 5 筆)
+    try {
+      let history = JSON.parse(localStorage.getItem('lunch_user_history') || '[]');
+      if (!history.includes(name)) {
+        history = [name, ...history].slice(0, 5);
+        localStorage.setItem('lunch_user_history', JSON.stringify(history));
+      }
+    } catch (e) {
+      console.error("Local storage error", e);
+    }
+
     if (remember) {
       localStorage.setItem('lunch_username', name);
       sessionStorage.setItem('lunch_username', name);
@@ -745,7 +716,6 @@ export default function App() {
     setUserName(''); setIsAdminMode(false);
     localStorage.removeItem('lunch_username');
     sessionStorage.removeItem('lunch_username');
-    window.location.reload(); // 確保重整以清除狀態
   };
 
   const handleToggleAdmin = (e) => {
@@ -764,10 +734,15 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
     setIsAnalyzing(true);
+    
     try {
       const compressedDataUrl = await resizeImage(file);
       const base64String = compressedDataUrl.replace("data:", "").replace(/^.+,/, "");
       const result = await analyzeImage(base64String);
+      
+      const newRestaurant = result.restaurant || { name: "AI 辨識餐廳", phone: "", address: "" };
+      const newItems = (result.items || []).map((i, idx) => ({ ...i, id: Date.now() + idx }));
+      
       await setDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), {
         items: newItems, 
         imageUrl: compressedDataUrl, 
@@ -775,9 +750,12 @@ export default function App() {
         orderDeadline: currentMenu.orderDeadline || '',
         menuDate: getTodayString()
       }, { merge: true });
-      setIsDrawerOpen(false);
+
     } catch (err) { 
-      if (window.confirm("上傳失敗: " + err.message)) console.error("上傳失敗");
+      if (window.confirm("上傳失敗: " + err.message)) {
+        console.error("上傳失敗: " + err.message); 
+      }
+      console.error(err);
     } finally { 
       setIsAnalyzing(false); 
     }
@@ -801,14 +779,16 @@ export default function App() {
     await updateDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), { orderDeadline: timeStr });
   };
 
+  // [新增] 菜單品項即時編輯處理函數
   const handleUpdateMenuItem = async (itemId, key, value) => {
     const updatedItems = currentMenu.items.map(item => {
       if (item.id === itemId) {
+        // 確保價格是數字，名稱是字串
         return { ...item, [key]: key === 'price' ? parseInt(value) || 0 : value };
       }
       return item;
     });
-    setEditingItemId(null); 
+    setEditingItemId(null); // 關閉編輯狀態
     setEditingKey(null);
     await updateDoc(doc(db, DATA_PATH, MENU_COLLECTION, 'today'), { items: updatedItems });
   };
@@ -816,118 +796,173 @@ export default function App() {
   if (!userName) return <Login onLogin={handleLogin} isConnected={!!user} />;
   if (!firebaseConfig.apiKey) return <div className="p-10 text-center">請先設定 .env</div>;
 
-  // --- Helper Component: Editable Menu Item ---
-  const EditableMenuItem = ({ item, isAdminMode, handleUpdate, handleRemove, handlePlaceOrder, isOrderingClosed, searchTerm }) => {
+  // --- Helper Component: Editable Menu Item (內部組件，避免單檔限制) ---
+  const EditableMenuItem = ({ item, isAdminMode, handleUpdate, handleRemove, handlePlaceOrder, isOrderingClosed }) => {
     const isEditing = editingItemId === item.id;
     const isNameEditing = isEditing && editingKey === 'name';
     const isPriceEditing = isEditing && editingKey === 'price';
+    
+    // 處理輸入欄位的 value
     const [tempValue, setTempValue] = useState(item.name);
 
     useEffect(() => {
-      if (isEditing) setTempValue(editingKey === 'name' ? item.name : item.price);
+      if (isEditing) {
+        setTempValue(editingKey === 'name' ? item.name : item.price);
+      }
     }, [isEditing, item.name, item.price, editingKey]);
 
     const handleStartEdit = (key) => {
-      if (isAdminMode) { setEditingItemId(item.id); setEditingKey(key); }
+      if (isAdminMode) {
+        setEditingItemId(item.id);
+        setEditingKey(key);
+      }
     };
 
     const handleStopEdit = (key, e) => {
-      if (key === 'name') handleUpdate(item.id, key, tempValue.trim() || item.name);
-      else handleUpdate(item.id, key, tempValue);
+      if (key === 'name') {
+        handleUpdate(item.id, key, tempValue.trim() || item.name); // 避免空值
+      } else {
+        handleUpdate(item.id, key, tempValue);
+      }
     };
 
     const handleKeyDown = (e, key) => {
-      if (e.key === 'Enter') e.target.blur();
-      else if (e.key === 'Escape') { setEditingItemId(null); setEditingKey(null); }
+      if (e.key === 'Enter') {
+        e.target.blur(); // 觸發 onBlur 結束編輯
+      } else if (e.key === 'Escape') {
+        setEditingItemId(null);
+        setEditingKey(null);
+      }
     };
 
     return (
       <div className={`p-4 flex justify-between items-center transition group ${isOrderingClosed ? 'opacity-50 grayscale' : 'hover:bg-orange-50'}`}>
         <div className="flex-1 min-w-0">
+          {/* 品項名稱 */}
           {isNameEditing ? (
-            <input type="text" autoFocus value={tempValue} onChange={(e) => setTempValue(e.target.value)} onBlur={(e) => handleStopEdit('name', e)} onKeyDown={(e) => handleKeyDown(e, 'name')} className="font-bold text-gray-800 w-full px-2 py-1 border border-orange-400 rounded outline-none" />
+            <input
+              type="text"
+              autoFocus
+              value={tempValue}
+              onChange={(e) => setTempValue(e.target.value)}
+              onBlur={(e) => handleStopEdit('name', e)}
+              onKeyDown={(e) => handleKeyDown(e, 'name')}
+              className="font-bold text-gray-800 w-full min-w-0 px-2 py-1 border border-orange-400 rounded-lg outline-none ring-2 ring-orange-100"
+            />
           ) : (
-            <div className={`font-bold text-gray-800 flex items-center gap-2 ${isAdminMode ? 'cursor-pointer hover:text-orange-600' : ''}`} onClick={() => handleStartEdit('name')}>
-              {item.name} 
-              {isAdminMode && <Pencil className="w-3 h-3 text-gray-300 group-hover:text-orange-400" />}
+            <div 
+              className={`font-bold text-gray-800 flex items-center gap-2 cursor-pointer ${isAdminMode ? 'hover:text-orange-600' : ''}`}
+              onClick={() => handleStartEdit('name')}
+            >
+              {item.name}
+              {isAdminMode && <Pencil className="w-3 h-3 text-gray-300 group-hover:text-orange-400 transition" />}
               {searchTerm && <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded">符合</span>}
             </div>
           )}
+
+          {/* 品項價格 */}
           {isPriceEditing ? (
-            <input type="number" autoFocus value={tempValue} onChange={(e) => setTempValue(e.target.value)} onBlur={(e) => handleStopEdit('price', e)} onKeyDown={(e) => handleKeyDown(e, 'price')} className="text-orange-600 font-semibold w-20 px-2 py-1 border border-orange-400 rounded outline-none mt-1" />
+            <input
+              type="number"
+              autoFocus
+              value={tempValue}
+              onChange={(e) => setTempValue(e.target.value)}
+              onBlur={(e) => handleStopEdit('price', e)}
+              onKeyDown={(e) => handleKeyDown(e, 'price')}
+              className="text-orange-600 font-semibold w-20 px-2 py-1 border border-orange-400 rounded-lg outline-none ring-2 ring-orange-100 mt-1"
+            />
           ) : (
-            <div className={`text-orange-600 font-semibold flex items-center gap-1 ${isAdminMode ? 'cursor-pointer hover:text-red-600' : ''}`} onClick={() => handleStartEdit('price')}>
+            <div 
+              className={`text-orange-600 font-semibold flex items-center gap-1 cursor-pointer ${isAdminMode ? 'hover:text-red-600' : ''}`}
+              onClick={() => handleStartEdit('price')}
+            >
               ${item.price}
-              {isAdminMode && <Pencil className="w-3 h-3 text-gray-300 group-hover:text-orange-400" />}
+              {isAdminMode && <Pencil className="w-3 h-3 text-gray-300 group-hover:text-orange-400 transition" />}
             </div>
           )}
         </div>
+
+        {/* 操作按鈕 */}
         <div className="flex items-center gap-2 shrink-0">
           {isAdminMode ? (
-            <button onClick={() => handleRemove(item.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition"><Trash2 className="w-5 h-5" /></button>
+            <button onClick={() => handleRemove(item.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition">
+              <Trash2 className="w-5 h-5" />
+            </button>
           ) : (
-            <button onClick={() => handlePlaceOrder(item)} disabled={isOrderingClosed} className={`px-4 py-1.5 rounded-full text-sm font-bold transition shadow-sm active:scale-95 ${isOrderingClosed ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border border-orange-200 text-orange-600 hover:bg-orange-600 hover:text-white'}`}>{isOrderingClosed ? '已截止' : '+ 點餐'}</button>
+            <button 
+              onClick={() => handlePlaceOrder(item)} 
+              disabled={isOrderingClosed} 
+              className={`px-4 py-1.5 rounded-full text-sm font-bold transition shadow-sm active:scale-95 
+                ${isOrderingClosed ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border border-orange-200 text-orange-600 hover:bg-orange-600 hover:text-white'}`}
+            >
+              {isOrderingClosed ? '已截止' : '+ 點餐'}
+            </button>
           )}
         </div>
       </div>
     );
   };
+  // --- End of Helper Component ---
 
   return (
-    <div className="bg-gray-50 h-screen flex flex-col text-gray-800 font-sans overflow-hidden relative">
-      
-      {/* Admin Drawer */}
-      <AdminDrawer 
-        isOpen={isDrawerOpen} 
-        onClose={() => setIsDrawerOpen(false)}
-        toggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
-        currentMenu={currentMenu}
-        updateRestaurantInfo={updateRestaurantInfo}
-        updateDeadline={updateDeadline}
-        handleImageUpload={handleImageUpload}
-        isAnalyzing={isAnalyzing}
-        fileInputRef={fileInputRef}
-        newItemName={newItemName}
-        setNewItemName={setNewItemName}
-        newItemPrice={newItemPrice}
-        setNewItemPrice={setNewItemPrice}
-        addMenuItem={addMenuItem}
-      />
-
-      {/* [Side Trigger] 僅在管理員模式+點餐頁+未開抽屜時顯示 */}
-      {isAdminMode && activeTab === 'menu' && !isDrawerOpen && (
-         <button 
-            onClick={() => setIsDrawerOpen(true)}
-            className="fixed right-0 top-[110px] z-50 bg-white border-l border-t border-b border-gray-200 shadow-md p-3 rounded-l-xl hover:bg-orange-50 hover:pl-4 hover:pr-2 transition-all duration-300 group transform translate-x-1 hover:translate-x-0"
-            title="開啟設定"
-          >
-            <Settings className="w-6 h-6 text-gray-500 group-hover:text-orange-500 transition-colors group-hover:rotate-90 duration-500" />
-         </button>
-      )}
-
+    <div className="bg-gray-50 h-screen flex flex-col text-gray-800 font-sans overflow-hidden">
       {/* Modals */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'ADMIN_LOGIN'} onClose={closeModal} title="管理員驗證" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">驗證</button></>}>
         <div className="flex flex-col gap-4"><div className="bg-orange-50 p-3 rounded-lg flex items-center gap-3 text-orange-800 text-sm"><Lock className="w-4 h-4" /><p>請輸入通行碼</p></div><input type="password" autoFocus className="w-full border border-gray-300 p-3 rounded-lg text-center text-2xl tracking-widest outline-none focus:ring-2 focus:ring-orange-500" placeholder="••••" maxLength={4} value={adminPin} onChange={(e) => { setAdminPin(e.target.value); setPinError(''); }} onKeyDown={(e) => e.key === 'Enter' && confirmModal()} />{pinError && <p className="text-red-500 text-sm mt-2 text-center">{pinError}</p>}</div>
       </Modal>
+      
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'PLACE_ORDER'} onClose={closeModal} title="確認點餐" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-orange-600 text-white rounded-lg">確認下單 (${modalConfig.data?.price * (orderQuantity === '' ? 1 : orderQuantity)})</button></>}>
         <div className="space-y-6"><div className="flex justify-between items-start"><div><p className="text-xs text-gray-400 mb-1">品項</p><p className="text-xl font-bold text-gray-800">{modalConfig.data?.name}</p></div><p className="text-xl font-bold text-orange-600">${modalConfig.data?.price}</p></div><div><p className="text-xs text-gray-400 mb-2">數量</p><div className="flex items-center gap-4"><button onClick={() => setOrderQuantity(Math.max(1, (orderQuantity === '' ? 1 : orderQuantity) - 1))} className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"><Minus className="w-4 h-4" /></button><input type="number" min="1" className="w-16 text-center border border-gray-300 rounded-lg py-2 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-orange-500" value={orderQuantity} onChange={(e) => { const val = e.target.value; if (val === '') setOrderQuantity(''); else { const num = parseInt(val); if (!isNaN(num) && num > 0) setOrderQuantity(num); } }} onBlur={() => { if (orderQuantity === '' || orderQuantity < 1) setOrderQuantity(1); }} /><button onClick={() => setOrderQuantity((orderQuantity === '' ? 1 : orderQuantity) + 1)} className="w-10 h-10 rounded-full border border-orange-200 bg-orange-50 flex items-center justify-center text-orange-600 hover:bg-orange-100"><Plus className="w-4 h-4" /></button></div></div><div><p className="text-xs text-gray-400 mb-2">備註 (選填)</p><textarea className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-none h-20" placeholder="例如：不要香菜..." value={orderNote} onChange={(e) => setOrderNote(e.target.value)} onCompositionStart={() => setIsNoteComposing(true)} onCompositionEnd={(e) => { setIsNoteComposing(false); setOrderNote(e.target.value); }} /></div></div>
       </Modal>
+      
+      {/* [修復] 移除重複定義，只保留這個 SETTLE_DEBT Modal */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUserName || modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
+
+      {/* [新增] 單筆訂單刪除確認 Modal */}
+      {/* [R3. 修正按鈕] 直接呼叫 handleOrderAction('DELETE_SINGLE_ITEM') */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_SINGLE'} onClose={closeModal} title="刪除單筆訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { handleOrderAction('DELETE_SINGLE_ITEM'); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}><p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的這筆訂單嗎？</p><p className="text-lg font-bold text-gray-800 mt-2">{modalConfig.data?.itemName} x{modalConfig.data?.quantity}</p><p className="text-sm text-gray-500 mt-1">金額 ${modalConfig.data?.price} 將會從帳本中扣除。</p></Modal>
+
+      {/* [修復] 確保 data.items 存在才進行 map，防止 Cannot read properties of undefined */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'MANAGE_ORDER'} onClose={closeModal} title={`管理 ${modalConfig.data?.userName} 的訂單`}>
         <div className="space-y-4">
           {modalConfig.data?.items?.map((item) => (
             <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
-              <div><div className="font-bold text-gray-800">{item.itemName} {item.quantity > 1 && <span className="text-orange-600">x{item.quantity}</span>}</div><div className="text-xs text-gray-500">${item.price} {item.note && `(${item.note})`}</div></div>
-              <button onClick={() => { setModalConfig({ isOpen: true, type: 'CONFIRM_DELETE_SINGLE', data: { id: item.id, price: item.price, userName: modalConfig.data.userName, itemName: item.itemName, quantity: item.quantity } }); }} className="p-2 text-red-500 hover:bg-red-100 rounded-full transition"><Trash2 className="w-4 h-4" /></button>
+              <div>
+                <div className="font-bold text-gray-800">{item.itemName} {item.quantity > 1 && <span className="text-orange-600">x{item.quantity}</span>}</div>
+                <div className="text-xs text-gray-500">${item.price} {item.note && `(${item.note})`}</div>
+              </div>
+              {/* [修正] 點擊後，設定為 CONFIRM_DELETE_SINGLE 類型，並傳遞訂單所需的完整資訊 */}
+              <button 
+                onClick={() => {
+                  setModalConfig({ 
+                    isOpen: true,
+                    type: 'CONFIRM_DELETE_SINGLE', 
+                    data: { 
+                      id: item.id, 
+                      price: item.price, 
+                      userName: modalConfig.data.userName, 
+                      itemName: item.itemName, 
+                      quantity: item.quantity
+                    } 
+                  });
+                }} 
+                className="p-2 text-red-500 hover:bg-red-100 rounded-full transition"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           ))}
-          <div className="pt-4 border-t text-right"><span className="text-sm text-gray-500 mr-2">總計</span><span className="text-xl font-bold text-gray-800">${modalConfig.data?.totalPrice}</span></div>
+          <div className="pt-4 border-t text-right">
+            <span className="text-sm text-gray-500 mr-2">總計</span>
+            <span className="text-xl font-bold text-gray-800">${modalConfig.data?.totalPrice}</span>
+          </div>
         </div>
       </Modal>
+
+      {/* [R3. 修正按鈕] 直接呼叫 handleOrderAction('DELETE_ALL_ORDERS') */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_ALL'} onClose={closeModal} title="刪除全部訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { handleOrderAction('DELETE_ALL_ORDERS'); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}><p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的所有訂單嗎？</p><p className="text-sm text-gray-500 mt-2">總金額 ${modalConfig.data?.totalPrice} 將會從帳本中扣除。</p></Modal>
 
-      {/* Header */}
+      {/* Header (Fixed) */}
       <header className="bg-white shadow-sm flex-none z-20">
         <div className="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -943,20 +978,19 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Container */}
-      <div className="flex-1 flex flex-col w-full overflow-hidden">
+      {/* Main Container (Flex Col) */}
+      <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full overflow-hidden">
         
-        {/* [Fixed Top Area] Tabs + Cover + Search */}
+        {/* 固定區域 */}
         <div className="flex-none bg-gray-50 z-10 relative">
-            <div className="flex justify-end p-2 max-w-3xl mx-auto w-full px-4">
+            <div className="flex justify-end p-2">
               <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none group">
                 <input type="checkbox" checked={isAdminMode} onChange={handleToggleAdmin} className="rounded text-orange-500 focus:ring-orange-500 cursor-pointer" />
                 <span className="group-hover:text-orange-600 transition">開啟管理員模式</span>
               </label>
             </div>
 
-            {/* Tabs */}
-            <div className="px-4 pb-2 max-w-3xl mx-auto w-full">
+            <div className="px-4 pb-2">
               <div className="flex bg-gray-200 p-1 rounded-xl shadow-inner">
                 <button onClick={() => setActiveTab('menu')} className={`flex-1 py-2 text-sm font-medium rounded-lg flex justify-center items-center gap-2 transition ${activeTab === 'menu' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}><Utensils className="w-4 h-4" /> 點餐</button>
                 <button onClick={() => setActiveTab('orders')} className={`flex-1 py-2 text-sm font-medium rounded-lg flex justify-center items-center gap-2 transition ${activeTab === 'orders' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}><Users className="w-4 h-4" /> 狀況 <span className="bg-gray-100 px-1.5 rounded-full text-xs ml-1">{todayOrders.length}</span></button>
@@ -964,59 +998,191 @@ export default function App() {
               </div>
             </div>
 
-            {/* Fixed Content for Menu Tab (Cover + Search) */}
             {activeTab === 'menu' && (
-              <div className="px-4 pb-2 max-w-3xl mx-auto w-full space-y-2">
-                {/* Cover */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                   <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
-                      {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
-                      <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
-                        <div className="flex flex-col justify-end h-full">
-                          <h2 className="font-bold text-2xl leading-tight mb-2">{currentMenu.restaurant?.name || '今日餐廳'}</h2>
-                          <div className="flex flex-col gap-1 text-sm text-gray-200">
-                            {currentMenu.restaurant?.phone && (<div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5" /> {formatPhoneNumber(currentMenu.restaurant.phone)}</div>)}
-                            <div className="flex items-center justify-between gap-2 mt-1">
-                              {currentMenu.restaurant?.address ? (<div className="flex items-center gap-2 truncate"><MapPin className="w-3.5 h-3.5 flex-none" /><span className="truncate">{currentMenu.restaurant.address}</span></div>) : <div></div>}
-                              {(currentMenu.restaurant?.name || currentMenu.restaurant?.address) && (<a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([currentMenu.restaurant.name, currentMenu.restaurant.address].filter(Boolean).join(" "))}`} target="_blank" rel="noreferrer" className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg whitespace-nowrap"><MapPin className="w-3 h-3" /> 地圖</a>)}
+              <div className="px-4 pt-2">
+                {/* [修改] 管理員模式下的兩欄佈局 */}
+                {isAdminMode ? (
+                  <div className="grid md:grid-cols-3 gap-4 mb-4">
+                    
+                    {/* 左側欄 (Menu Cover & Items List) - 佔 2/3 寬度 */}
+                    <div className="md:col-span-2 space-y-4">
+                      {/* Menu Cover Block (保持原樣) */}
+                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                         <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
+                            {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
+                            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
+                              <div className="flex flex-col justify-end h-full">
+                                <h2 className="font-bold text-2xl leading-tight mb-2">{currentMenu.restaurant?.name || '今日餐廳'}</h2>
+                                <div className="flex flex-col gap-1 text-sm text-gray-200">
+                                  {currentMenu.restaurant?.phone && (
+                                    <div className="flex items-center gap-2">
+                                      <Phone className="w-3.5 h-3.5" /> 
+                                      {formatPhoneNumber(currentMenu.restaurant.phone)}
+                                    </div>
+                                  )}
+                                  <div className="flex items-center justify-between gap-2 mt-1">
+                                    {currentMenu.restaurant?.address ? (
+                                      <div className="flex items-center gap-2 truncate">
+                                        <MapPin className="w-3.5 h-3.5 flex-none" /> 
+                                        <span className="truncate">{currentMenu.restaurant.address}</span>
+                                      </div>
+                                    ) : (
+                                      <div></div>
+                                    )}
+                                    {(currentMenu.restaurant?.name || currentMenu.restaurant?.address) && (
+                                      <a 
+                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([currentMenu.restaurant.name, currentMenu.restaurant.address].filter(Boolean).join(" "))}`} 
+                                        target="_blank" 
+                                        rel="noreferrer" 
+                                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg whitespace-nowrap"
+                                      >
+                                        <MapPin className="w-3 h-3" /> 地圖
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
+                         </div>
+                         
+                         {currentMenu.orderDeadline && (
+                          <div className={`px-4 py-2 flex justify-between items-center ${isOrderingClosed ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                            <div className="flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4" />{isOrderingClosed ? '今日已收單' : `收單時間：${currentMenu.orderDeadline}`}</div>
+                            {isOrderingClosed && <span className="text-xs bg-white/50 px-2 py-0.5 rounded">Closed</span>}
+                          </div>
+                         )}
+                      </div>
+                      
+                      {/* Search Bar Block (保持原樣) */}
+                      <div className="bg-white rounded-xl border-b border-gray-100 p-4">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                          <input 
+                            type="text" 
+                            placeholder="搜尋..." 
+                            className="w-full pl-9 pr-9 py-2.5 bg-gray-100 border-transparent focus:bg-white focus:ring-2 focus:ring-orange-500 rounded-lg text-sm transition outline-none" 
+                            value={searchTerm} 
+                            onChange={(e) => setSearchTerm(e.target.value)} 
+                            onCompositionStart={() => setIsSearchComposing(true)} 
+                            onCompositionEnd={(e) => { setIsSearchComposing(false); setSearchTerm(e.target.value); }} 
+                          />
+                          {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 右側欄 (Admin Settings) - 佔 1/3 寬度 */}
+                    <div className="md:col-span-1">
+                      <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-4 shadow-sm mb-4">
+                        <h3 className="text-sm font-bold text-orange-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 管理員設置</h3>
+                        {/* 餐廳資訊編輯區塊 */}
+                        <div className="space-y-2">
+                          <h4 className="text-xs text-gray-500 font-bold mt-2">餐廳資訊</h4>
+                          <input className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-orange-200 outline-none" placeholder="餐廳名稱" value={currentMenu.restaurant?.name} onChange={e => updateRestaurantInfo('name', e.target.value)} />
+                          <div className="flex gap-2">
+                            <input className="flex-1 p-2 border rounded text-sm focus:ring-2 focus:ring-orange-200 outline-none" placeholder="電話" value={currentMenu.restaurant?.phone} onChange={e => updateRestaurantInfo('phone', e.target.value)} />
+                            <input className="flex-1 p-2 border rounded text-sm focus:ring-2 focus:ring-orange-200 outline-none" placeholder="地址" value={currentMenu.restaurant?.address} onChange={e => updateRestaurantInfo('address', e.target.value)} />
+                          </div>
+                          <div className="flex items-center gap-2 p-2 bg-white border rounded">
+                            <Clock className="w-4 h-4 text-gray-500" />
+                            <span className="text-xs text-gray-500">收單時間：</span>
+                            <input type="time" className="flex-1 text-sm outline-none" value={currentMenu.orderDeadline} onChange={e => updateDeadline(e.target.value)} />
+                          </div>
+                        </div>
+                        {/* AI 辨識區塊 */}
+                        <div className="flex items-center gap-4 pt-2 border-t border-orange-200">
+                          <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
+                          <button onClick={() => fileInputRef.current.click()} disabled={isAnalyzing} className="flex-1 bg-gradient-to-r from-orange-500 to-pink-500 text-white py-2.5 rounded-lg text-sm font-bold hover:shadow-md transition flex justify-center items-center gap-2">
+                            {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Camera className="w-4 h-4" />}
+                            {isAnalyzing ? 'AI 正在讀取菜單...' : '拍照/上傳菜單 (AI 自動建立)'}
+                          </button>
+                        </div>
+                        {/* 手動新增品項區塊 */}
+                        <div className="pt-2 border-t border-orange-200">
+                          <h4 className="text-xs text-gray-500 font-bold mb-1">手動新增品項</h4>
+                          <div className="flex gap-2">
+                            <input placeholder="品項名稱" className="flex-2 p-2 text-sm border rounded w-full" value={newItemName} onChange={e => setNewItemName(e.target.value)} />
+                            <input placeholder="$" type="number" className="flex-1 p-2 text-sm border rounded w-20" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} />
+                            <button onClick={addMenuItem} className="bg-gray-800 text-white px-3 rounded text-sm">+</button>
                           </div>
                         </div>
                       </div>
-                   </div>
-                   {currentMenu.orderDeadline && (
-                    <div className={`px-4 py-2 flex justify-between items-center ${isOrderingClosed ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                      <div className="flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4" />{isOrderingClosed ? '今日已收單' : `收單時間：${currentMenu.orderDeadline}`}</div>
-                      {isOrderingClosed && <span className="text-xs bg-white/50 px-2 py-0.5 rounded">Closed</span>}
                     </div>
-                   )}
-                </div>
-                
-                {/* Search Bar */}
-                <div className="bg-white rounded-xl border border-gray-100 p-2 shadow-sm">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input 
-                        type="text" 
-                        placeholder="搜尋..." 
-                        className="w-full pl-9 pr-9 py-2 bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-orange-500 rounded-lg text-sm transition outline-none" 
-                        value={searchTerm} 
-                        onChange={(e) => setSearchTerm(e.target.value)} 
-                        onCompositionStart={() => setIsSearchComposing(true)} 
-                        onCompositionEnd={(e) => { setIsSearchComposing(false); setSearchTerm(e.target.value); }} 
-                      />
-                      {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>}
+                  </div>
+                ) : (
+                  // 非管理員或行動裝置時的單欄佈局 (還原原先的 Menu Cover + Search)
+                  <>
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+                       <div className="w-full h-32 md:h-48 bg-gray-800 relative group overflow-hidden">
+                          {currentMenu.imageUrl ? <img src={currentMenu.imageUrl} alt="Menu" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-100"><Camera className="w-12 h-12 opacity-20" /></div>}
+                          <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-12 text-white">
+                            <div className="flex flex-col justify-end h-full">
+                              <h2 className="font-bold text-2xl leading-tight mb-2">{currentMenu.restaurant?.name || '今日餐廳'}</h2>
+                              <div className="flex flex-col gap-1 text-sm text-gray-200">
+                                {currentMenu.restaurant?.phone && (
+                                  <div className="flex items-center gap-2">
+                                    <Phone className="w-3.5 h-3.5" /> 
+                                    {formatPhoneNumber(currentMenu.restaurant.phone)}
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-between gap-2 mt-1">
+                                  {currentMenu.restaurant?.address ? (
+                                    <div className="flex items-center gap-2 truncate">
+                                      <MapPin className="w-3.5 h-3.5 flex-none" /> 
+                                      <span className="truncate">{currentMenu.restaurant.address}</span>
+                                    </div>
+                                  ) : (
+                                    <div></div>
+                                  )}
+                                  {(currentMenu.restaurant?.name || currentMenu.restaurant?.address) && (
+                                    <a 
+                                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([currentMenu.restaurant.name, currentMenu.restaurant.address].filter(Boolean).join(" "))}`} 
+                                      target="_blank" 
+                                      rel="noreferrer" 
+                                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg whitespace-nowrap"
+                                    >
+                                      <MapPin className="w-3 h-3" /> 地圖
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {currentMenu.orderDeadline && (
+                           <div className={`px-4 py-2 flex justify-between items-center ${isOrderingClosed ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                             <div className="flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4" />{isOrderingClosed ? '今日已收單' : `收單時間：${currentMenu.orderDeadline}`}</div>
+                             {isOrderingClosed && <span className="text-xs bg-white/50 px-2 py-0.5 rounded">Closed</span>}
+                           </div>
+                          )}
+                       </div>
                     </div>
-                </div>
+                    
+                    <div className="bg-white rounded-t-2xl border-b border-gray-100 p-4">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <input 
+                          type="text" 
+                          placeholder="搜尋..." 
+                          className="w-full pl-9 pr-9 py-2.5 bg-gray-100 border-transparent focus:bg-white focus:ring-2 focus:ring-orange-500 rounded-lg text-sm transition outline-none" 
+                          value={searchTerm} 
+                          onChange={(e) => setSearchTerm(e.target.value)} 
+                          onCompositionStart={() => setIsSearchComposing(true)} 
+                          onCompositionEnd={(e) => { setIsSearchComposing(false); setSearchTerm(e.target.value); }} 
+                        />
+                        {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
         </div>
 
-        {/* Scrollable Items Area */}
         <div className="flex-1 overflow-y-auto px-4 pb-6 pt-0 bg-gray-50">
-          <div className="max-w-3xl mx-auto w-full">
-            {activeTab === 'menu' && (
-              <div className="bg-white rounded-2xl shadow-sm overflow-hidden mt-2 min-h-[200px]">
+          {activeTab === 'menu' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="bg-white rounded-b-2xl shadow-sm overflow-hidden min-h-[200px]">
                 <div className="divide-y divide-gray-50">
                   {filteredItems.length > 0 ? filteredItems.map(item => (
                     <EditableMenuItem
@@ -1027,7 +1193,6 @@ export default function App() {
                       handleRemove={removeMenuItem}
                       handlePlaceOrder={handlePlaceOrder}
                       isOrderingClosed={isOrderingClosed}
-                      searchTerm={searchTerm}
                     />
                   )) : !searchTerm && (
                     <div className="p-8 text-center text-gray-400">
@@ -1036,55 +1201,158 @@ export default function App() {
                   )}
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {activeTab !== 'menu' && (
-               <div className="space-y-4 pt-4 animate-fade-in">
-                  {activeTab === 'orders' && (
-                      <>
-                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center"><div><h3 className="text-blue-900 font-bold">今日訂單總覽</h3><p className="text-blue-700 text-sm">共 {todayOrders.length} 份餐點</p></div><div className="text-right"><div className="text-2xl font-bold text-blue-600">${todayOrders.reduce((sum, o) => sum + parseInt(o.price || 0), 0)}</div><div className="text-xs text-blue-400">今日總額</div></div></div>
-                      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        {todayOrders.length === 0 ? (<div className="p-8 text-center text-gray-400">今天還沒有人點餐喔</div>) : (
-                          <ul className="divide-y divide-gray-100">
-                            {groupedOrders.map((group) => (
-                              <li key={group.userName} className="p-4 flex items-start justify-between hover:bg-gray-50 transition">
-                                <div className="flex items-start gap-3 flex-1">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${group.userName === userName ? 'bg-orange-500' : 'bg-gray-400'}`}>{group.userName.charAt(0)}</div>
-                                  <div className="flex-1">
-                                    <div className="font-semibold text-gray-800 flex items-center gap-2">
-                                      {group.userName}
-                                      {(isAdminMode || group.userName === userName) && (<div className="flex items-center gap-1 ml-2"><button onClick={() => handleManageOrder(group)} className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-200"><Settings className="w-3.5 h-3.5" /></button><button onClick={() => handleDeleteAll(group)} className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></button></div>)}
-                                    </div>
-                                    <div className="text-sm text-gray-600 mt-1 leading-relaxed">
-                                      {group.items.map((order, idx) => (
-                                        <span key={order.id}>{idx > 0 && <span className="mx-1 text-gray-400 font-light">+</span>}<span>{order.itemName}</span>{order.quantity > 1 && <span className="text-orange-600 font-bold ml-0.5">x{order.quantity}</span>}</span>
-                                      ))}
-                                    </div>
-                                    {group.items.some(o => o.note) && (<div className="mt-1.5 flex flex-wrap gap-1">{group.items.filter(o => o.note).map(o => (<span key={o.id} className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{o.itemName}: {o.note}</span>))}</div>)}
-                                  </div>
+          {activeTab === 'orders' && (
+            <div className="space-y-4 animate-fade-in pt-4">
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center"><div><h3 className="text-blue-900 font-bold">今日訂單總覽</h3><p className="text-blue-700 text-sm">共 {todayOrders.length} 份餐點</p></div><div className="text-right"><div className="text-2xl font-bold text-blue-600">${todayOrders.reduce((sum, o) => sum + parseInt(o.price || 0), 0)}</div><div className="text-xs text-blue-400">今日總額</div></div></div>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                {todayOrders.length === 0 ? (<div className="p-8 text-center text-gray-400">今天還沒有人點餐喔</div>) : (
+                  <ul className="divide-y divide-gray-100">
+                    {groupedOrders.map((group) => (
+                      <li key={group.userName} className="p-4 flex items-start justify-between hover:bg-gray-50 transition">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${group.userName === userName ? 'bg-orange-500' : 'bg-gray-400'}`}>
+                            {group.userName.charAt(0)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-semibold text-gray-800 flex items-center gap-2">
+                              {group.userName}
+                              {(isAdminMode || group.userName === userName) && (
+                                <div className="flex items-center gap-1 ml-2">
+                                   <button onClick={() => handleManageOrder(group)} className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-200">
+                                     <Settings className="w-3.5 h-3.5" />
+                                   </button>
+                                   <button onClick={() => handleDeleteAll(group)} className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50">
+                                     <Trash2 className="w-3.5 h-3.5" />
+                                   </button>
                                 </div>
-                                <div className="font-mono font-medium text-gray-600 shrink-0 ml-2">${group.totalPrice}</div>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      </>
-                  )}
-                  {activeTab === 'wallet' && (
-                      <>
-                      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                        <h3 className="text-gray-500 font-medium mb-2 flex items-center gap-2"><User className="w-4 h-4"/> 我的帳本</h3>
-                        <div className="flex items-end justify-between mb-4"><div><div className="text-4xl font-bold text-gray-800">${myUser.balance}</div><div className="text-sm text-gray-400 mt-1">目前累積欠款</div></div>{myUser.balance > 0 ? (<div className="text-right"><span className="inline-block bg-red-100 text-red-600 text-xs px-2 py-1 rounded mb-1">尚未付款</span><p className="text-xs text-gray-400">請找管理員結帳</p></div>) : (<div className="flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold"><CheckCircle className="w-4 h-4" /> 無欠款</div>)}</div>
-                        <div className="border-t pt-4"><h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">每日消費明細</h4><div className="space-y-4">{groupedHistory.length > 0 ? groupedHistory.map(group => (<div key={group.date} className="flex gap-4 items-start group"><div className="flex flex-col items-center pt-1 w-12 shrink-0"><span className="text-3xl font-black text-orange-200 leading-none group-hover:text-orange-400 transition">{group.day}</span><span className="text-[10px] font-bold text-gray-400 uppercase mt-1">{group.month}</span></div><div className="flex-1 pt-1 border-b border-gray-200 pb-4 group-last:border-0"><div className="flex justify-between items-center mb-3"><span className="text-[10px] font-bold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{group.weekday}</span><span className="font-bold text-gray-900 text-lg">${group.total}</span></div><div className="space-y-2 bg-white rounded-lg p-2 border border-transparent hover:border-gray-100 hover:shadow-sm transition">{group.orders.map(h => (<div key={h.id} className="text-sm text-gray-600 flex justify-between"><span>{h.itemName} {h.quantity > 1 && `x${h.quantity}`}</span><span className="text-gray-400">${h.price}</span></div>))}</div></div></div>)) : <div className="text-gray-400 text-sm italic text-center py-4">尚無消費紀錄</div>}</div></div>
-                      </div>
-                      {isAdminMode ? (<div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"><div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-gray-700 flex items-center gap-2"><Users className="w-4 h-4" /> 辦公室總帳</h3><span className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">總欠款: ${totalDebt}</span></div><div className="divide-y divide-gray-100">{Object.values(usersMap).sort((a, b) => b.balance - a.balance).map(u => (<div key={u.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold">{u.name.charAt(0)}</div><div><div className="font-medium text-gray-900">{u.name}</div><div className={`text-xs ${u.balance > 0 ? 'text-red-500' : 'text-green-500'}`}>{u.balance > 0 ? '未結清' : '已結清'}</div></div></div><div className="flex items-center gap-4"><div className="text-right"><span className={`font-bold ${u.balance > 0 ? 'text-gray-800' : 'text-gray-300'}`}>${u.balance}</span></div>{isAdminMode && u.balance > 0 && (<button onClick={() => handleSettleDebt(u.id, u.balance, u.name)} className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-200 transition">收款</button>)}</div></div>))}</div></div>) : <div className="text-center text-xs text-gray-300 py-4 flex items-center justify-center gap-1"><Lock className="w-3 h-3" /> 只有管理員可查看其他人帳務</div>}
-                      </>
-                  )}
-               </div>
-            )}
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1 leading-relaxed">
+                              {group.items.map((order, idx) => (
+                                <span key={order.id}>
+                                  {idx > 0 && <span className="mx-1 text-gray-400 font-light">+</span>}
+                                  <span>{order.itemName}</span>
+                                  {order.quantity > 1 && <span className="text-orange-600 font-bold ml-0.5">x{order.quantity}</span>}
+                                </span>
+                              ))}
+                            </div>
+                            {group.items.some(o => o.note) && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {group.items.filter(o => o.note).map(o => (
+                                  <span key={o.id} className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                    {o.itemName}: {o.note}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="font-mono font-medium text-gray-600 shrink-0 ml-2">
+                          ${group.totalPrice}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
 
-          </div>
+          {activeTab === 'wallet' && (
+            <div className="space-y-6 animate-fade-in pt-4">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                <h3 className="text-gray-500 font-medium mb-4 flex items-center gap-2"><User className="w-4 h-4"/> 我的帳本</h3>
+                <div className="flex items-end justify-between mb-6">
+                  <div>
+                    <div className="text-4xl font-bold text-gray-800">${myUser.balance}</div>
+                    <div className="text-sm text-gray-400 mt-1">目前累積欠款</div>
+                  </div>
+                  {myUser.balance > 0 ? (
+                    <div className="text-right">
+                      <span className="inline-block bg-red-100 text-red-600 text-xs px-2 py-1 rounded mb-1">尚未付款</span>
+                      <p className="text-xs text-gray-400">請找管理員結帳</p>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold">
+                      <CheckCircle className="w-4 h-4" /> 無欠款
+                    </div>
+                  )}
+                </div>
+                
+                {/* [實作] 每日消費明細：採用 Style D (雜誌排版) */}
+                <div className="border-t pt-4">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">歷史紀錄</h4>
+                  <div className="space-y-6 pl-2">
+                    {groupedHistory.length > 0 ? groupedHistory.map((group, idx) => (
+                        <div key={group.date} className="flex gap-4 items-start group">
+                            {/* 左側：大日期數字與月份 */}
+                            <div className="flex flex-col items-center pt-1 w-12 shrink-0">
+                                <span className="text-3xl font-black text-orange-200 leading-none group-hover:text-orange-400 transition">{group.day}</span>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase mt-1">{group.month}</span>
+                            </div>
+                            {/* 右側：內容區塊 */}
+                            <div className="flex-1 pt-1 border-b border-gray-200 pb-4 group-last:border-0">
+                                <div className="flex justify-between items-center mb-3">
+                                   <span className="text-[10px] font-bold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{group.weekday}</span>
+                                   <span className="font-bold text-gray-900 text-lg">${group.total}</span>
+                                </div>
+                                <div className="space-y-2 bg-white rounded-lg p-2 border border-transparent hover:border-gray-100 hover:shadow-sm transition">
+                                  {group.orders.map(h => (
+                                     <div key={h.id} className="text-sm text-gray-600 flex justify-between">
+                                       <span>{h.itemName} {h.quantity > 1 && `x${h.quantity}`}</span>
+                                       <span className="text-gray-400">${h.price}</span>
+                                     </div>
+                                  ))}
+                                </div>
+                            </div>
+                        </div>
+                    )) : (
+                      <div className="text-gray-400 text-sm italic text-center py-4">尚無消費紀錄</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* [修改] 只有管理員看得到辦公室總帳 */}
+              {isAdminMode ? (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+                    <h3 className="font-bold text-gray-700 flex items-center gap-2"><Users className="w-4 h-4" /> 辦公室總帳</h3>
+                    <span className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">總欠款: ${totalDebt}</span>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {Object.values(usersMap).sort((a, b) => b.balance - a.balance).map(u => (
+                      <div key={u.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold">{u.name.charAt(0)}</div>
+                          <div>
+                            <div className="font-medium text-gray-900">{u.name}</div>
+                            <div className={`text-xs ${u.balance > 0 ? 'text-red-500' : 'text-green-500'}`}>{u.balance > 0 ? '未結清' : '已結清'}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <span className={`font-bold ${u.balance > 0 ? 'text-gray-800' : 'text-gray-300'}`}>${u.balance}</span>
+                          </div>
+                          {u.balance > 0 && (
+                            <button onClick={() => handleSettleDebt(u.id, u.balance, u.name)} className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-200 transition">收款</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                // 普通使用者提示
+                <div className="text-center text-xs text-gray-300 py-4 flex items-center justify-center gap-1">
+                  <Lock className="w-3 h-3" /> 只有管理員可查看其他人帳務
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
