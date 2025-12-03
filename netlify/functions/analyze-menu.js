@@ -47,7 +47,8 @@ exports.handler = async function(event, context) {
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: "Analyze this menu image. 1. Extract the Restaurant Name, Phone Number, and Address. 2. Extract all food items and their prices. Return a JSON object with this exact structure: { \"restaurant\": { \"name\": \"string\", \"phone\": \"string\", \"address\": \"string\" }, \"items\": [{ \"name\": \"string\", \"price\": 123 }] }. If address or phone is missing, use empty string. Do not use markdown code blocks. Just pure JSON string." },
+              // [優化提示詞] 增加指令，要求模型忽略中文品項名稱中，因排版產生的不必要空格，確保詞彙連貫性。
+              { text: "Analyze this menu image. 1. Extract the Restaurant Name, Phone Number, and Address. 2. Extract all food items and their prices. Critically, ignore spaces in item names that appear to be simple layout formatting, especially for Mandarin text. Treat words as cohesive units (e.g., '紅 燒 牛肉 麵' must be '紅燒牛肉麵'). Return a JSON object with this exact structure: { \"restaurant\": { \"name\": \"string\", \"phone\": \"string\", \"address\": \"string\" }, \"items\": [{ \"name\": \"string\", \"price\": 123 }] }. If address or phone is missing, use empty string. Do not use markdown code blocks. Just pure JSON string." },
               { inlineData: { mimeType: "image/jpeg", data: base64Image } }
             ]
           }]
