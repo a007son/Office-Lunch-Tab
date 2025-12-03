@@ -561,8 +561,11 @@ export default function App() {
   };
 
   // 處理訂單操作 (刪除單項 / 刪除整單)
-  const handleOrderAction = async () => {
-    const { type, data } = modalConfig;
+  // [R1. 讓 handleOrderAction 接收一個 explicitType 以規避 State 延遲問題]
+  const handleOrderAction = async (explicitType) => {
+    // 優先使用明確傳入的類型，否則使用 State 中的類型 (但這個 fall back 在按鈕修正後應該不會被執行到)
+    const type = explicitType || modalConfig.type;
+    const data = modalConfig.data;
     
     console.log(`[DEBUG] handleOrderAction triggered. Type: ${type}, Data:`, data); // DEBUG LOG
     
@@ -593,6 +596,8 @@ export default function App() {
             return;
         }
 
+        // NOTE: 這裡使用 todayOrders state 是可接受的，因為它由 onSnapshot 維護，
+        // 但為了確保在極端狀況下仍能運作，我們讓它 fallback 到元件 state，並加入安全檢查。
         const userOrders = todayOrders.filter(o => o.userName === data.userName);
         
         if (userOrders.length === 0) {
@@ -645,8 +650,16 @@ export default function App() {
       await updateDoc(doc(db, DATA_PATH, USERS_COLLECTION, data.targetUser), { balance: increment(-data.amount) });
       closeModal();
     } else if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS' || type === 'CONFIRM_DELETE_SINGLE') {
-      // 確保 CONFIRM_DELETE_SINGLE 委派給 handleOrderAction, DELETE_SINGLE_ITEM/DELETE_ALL_ORDERS 也是最終執行步驟
-      handleOrderAction();
+      // [R2. 移除刪除邏輯] 刪除操作的最終確認現在由按鈕直接呼叫 handleOrderAction('FINAL_TYPE') 處理
+      // 這裡只保留原有的非刪除邏輯，或等待按鈕處的修正。
+      // 由於這段邏輯原本就是錯誤的，且所有刪除動作都透過按鈕觸發最終的 action，
+      // 所以這裡可以安全地移除，讓按鈕直接呼叫 handleOrderAction('FINAL_TYPE')。
+      // 如果需要執行，應該在按鈕處處理。
+      // 為了不影響其他可能依賴這個舊邏輯的流程（例如可能還有未修復的刪除邏輯依賴它），
+      // 我們讓它使用新的 handleOrderAction 結構，但僅在不是 CONFIRM_DELETE_SINGLE 時呼叫。
+      if (type === 'DELETE_SINGLE_ITEM' || type === 'DELETE_ALL_ORDERS') {
+          handleOrderAction(); // 呼叫時不傳遞 explicitType，仍使用 modalConfig.type (但建議未來將此流程完全重構成直接呼叫)
+      }
     }
   };
 
@@ -906,11 +919,8 @@ export default function App() {
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'SETTLE_DEBT'} onClose={closeModal} title="結帳收款" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={confirmModal} className="px-4 py-2 bg-green-600 text-white rounded-lg">確認已收款</button></>}><p>確認收到 <span className="font-bold text-gray-800">{modalConfig.data?.targetUserName || modalConfig.data?.targetUser}</span> 的款項？</p><p className="text-2xl font-bold text-green-600 text-center my-4">${modalConfig.data?.amount}</p></Modal>
 
       {/* [新增] 單筆訂單刪除確認 Modal */}
-      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_SINGLE'} onClose={closeModal} title="刪除單筆訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { setModalConfig({ ...modalConfig, type: 'DELETE_SINGLE_ITEM' }); confirmModal(); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}>
-        <p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的這筆訂單嗎？</p>
-        <p className="text-lg font-bold text-gray-800 mt-2">{modalConfig.data?.itemName} x{modalConfig.data?.quantity}</p>
-        <p className="text-sm text-gray-500 mt-1">金額 ${modalConfig.data?.price} 將會從帳本中扣除。</p>
-      </Modal>
+      {/* [R3. 修正按鈕] 直接呼叫 handleOrderAction('DELETE_SINGLE_ITEM') */}
+      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_SINGLE'} onClose={closeModal} title="刪除單筆訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { handleOrderAction('DELETE_SINGLE_ITEM'); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}><p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的這筆訂單嗎？</p><p className="text-lg font-bold text-gray-800 mt-2">{modalConfig.data?.itemName} x{modalConfig.data?.quantity}</p><p className="text-sm text-gray-500 mt-1">金額 ${modalConfig.data?.price} 將會從帳本中扣除。</p></Modal>
 
       {/* [修復] 確保 data.items 存在才進行 map，防止 Cannot read properties of undefined */}
       <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'MANAGE_ORDER'} onClose={closeModal} title={`管理 ${modalConfig.data?.userName} 的訂單`}>
@@ -949,10 +959,8 @@ export default function App() {
         </div>
       </Modal>
 
-      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_ALL'} onClose={closeModal} title="刪除全部訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { setModalConfig({ ...modalConfig, type: 'DELETE_ALL_ORDERS' }); confirmModal(); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}>
-        <p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的所有訂單嗎？</p>
-        <p className="text-sm text-gray-500 mt-2">總金額 ${modalConfig.data?.totalPrice} 將會從帳本中扣除。</p>
-      </Modal>
+      {/* [R3. 修正按鈕] 直接呼叫 handleOrderAction('DELETE_ALL_ORDERS') */}
+      <Modal isOpen={modalConfig.isOpen && modalConfig.type === 'CONFIRM_DELETE_ALL'} onClose={closeModal} title="刪除全部訂單" footer={<><button onClick={closeModal} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button><button onClick={() => { handleOrderAction('DELETE_ALL_ORDERS'); }} className="px-4 py-2 bg-red-600 text-white rounded-lg">確認刪除</button></>}><p>確定要刪除 <span className="font-bold">{modalConfig.data?.userName}</span> 的所有訂單嗎？</p><p className="text-sm text-gray-500 mt-2">總金額 ${modalConfig.data?.totalPrice} 將會從帳本中扣除。</p></Modal>
 
       {/* Header (Fixed) */}
       <header className="bg-white shadow-sm flex-none z-20">
